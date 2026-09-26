@@ -481,7 +481,7 @@ h2.titulo-grupo { font-size: calc(24px * var(--fs)); margin: 28px 0 8px; }
 .chip.mudo { background: transparent; color: var(--muted); border: 1px solid var(--line); }
 .grupo-data { font-family: var(--sans); font-size: calc(12.5px * var(--fs)); font-weight: 700; color: var(--muted); margin: 10px 4px 0; }
 .grupo-data:first-child { margin-top: 0; }
-.cab-bloco { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.cab-bloco { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; margin-bottom: 8px; }
 .cab-bloco h2 { margin: 0; }
 .link-btn.voltar { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
 .link-btn.mini { min-height: 0; padding: 0 0 0 10px; font-size: calc(12.5px * var(--fs)); color: var(--neg); }
@@ -537,11 +537,49 @@ h2.titulo-grupo { font-size: calc(24px * var(--fs)); margin: 28px 0 8px; }
 .dados-cli dt { font-size: calc(12.5px * var(--fs)); font-weight: 700; color: var(--muted); }
 .dados-cli dd { margin: 2px 0 0; white-space: pre-wrap; }
 
+
+/* ============ Financeiro e relatórios ============ */
+.acoes-conta { width: 100%; justify-content: flex-end; }
+.item.conta { cursor: default; }
+.destaque-reserva { padding: 16px; border-radius: 16px; background: var(--surface-2); }
+.destaque-reserva .v { font-family: var(--serif); font-size: calc(30px * var(--fs)); font-weight: 600; }
+.destaque-reserva .r { color: var(--muted); font-size: calc(13px * var(--fs)); }
+.meta-barra { height: 12px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 8px 0 6px; }
+.meta-barra i { display: block; height: 100%; border-radius: 999px; background: var(--pos); }
+.linha-meta + .linha-meta { margin-top: 16px; }
+.stats-rel { grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); }
+.stats-rel .stat { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.stats-rel .n { font-size: calc(22px * var(--fs)); }
+.stats-rel small { font-size: calc(12px * var(--fs)); }
+.stats-rel .stat { min-width: 0; }
+.stats-rel .chip { white-space: normal; }
+@media (max-width: 700px) { .stats-rel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stats-rel .stat:last-child { grid-column: auto; } }
+@media (max-width: 380px) { .stats-rel { grid-template-columns: 1fr; } }
+.b-ouro { background: var(--caramelo); }
+.graf-meses { height: 160px; }
+.graf-meses .graf-col { cursor: default; }
+.tabela-rola { overflow-x: auto; margin-top: 14px; }
+.tabela-meses { width: 100%; border-collapse: collapse; font-size: calc(13.5px * var(--fs)); }
+.tabela-meses th, .tabela-meses td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tabela-meses th:first-child { text-align: left; }
+.tabela-meses thead th { color: var(--muted); font-size: calc(12px * var(--fs)); }
+.tabela-meses tr.atual th, .tabela-meses tr.atual td { background: var(--surface-2); font-weight: 700; }
+.fontes-fixos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 420px) { .fontes-fixos { grid-template-columns: 1fr; } }
+.opcao-fixos { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); color: var(--ink); }
+.opcao-fixos[aria-pressed="true"] { border-color: var(--choco); background: var(--surface-2); }
+:root[data-theme="dark"] .opcao-fixos[aria-pressed="true"] { border-color: var(--caramelo); }
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] .opcao-fixos[aria-pressed="true"] { border-color: var(--caramelo); } }
+.opcao-fixos .r { font-size: calc(12.5px * var(--fs)); font-weight: 700; color: var(--muted); }
+.opcao-fixos .v { font-family: var(--serif); font-size: calc(22px * var(--fs)); font-weight: 600; }
+.opcao-fixos small { color: var(--muted); font-size: calc(12px * var(--fs)); }
+.btn-icone:disabled { opacity: .35; cursor: not-allowed; }
+
 /* ============ Ajustes finais (ficam por último para valer sobre as regras anteriores) ============ */
 .seg { border-radius: 22px; }
 @media (max-width: 520px) {
-  .abas { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0; overflow: visible; }
-  .abas a { flex: none; padding: 10px 2px; font-size: calc(12.5px * var(--fs)); }
+  .abas { display: flex; justify-content: space-between; gap: 2px; overflow-x: auto; margin-left: calc(-1 * clamp(14px, 4vw, 32px)); margin-right: calc(-1 * clamp(14px, 4vw, 32px)); padding: 0 6px; }
+  .abas a { flex: 0 0 auto; padding: 10px 3px; font-size: calc(12.5px * var(--fs)); }
 }
 @media (max-width: 360px) {
   .abas a { font-size: calc(11.5px * var(--fs)); }

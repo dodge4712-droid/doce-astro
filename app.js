@@ -2,8 +2,8 @@
 (function () {
   'use strict';
   const C = window.Calc;
-  const VERSAO = '4.0.0';
-  const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos', 'lancamentos', 'estoque'];
+  const VERSAO = '5.0.0';
+  const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos', 'lancamentos', 'estoque', 'contasPagar', 'recorrencias'];
   function dadosVazios() { const d = {}; TABELAS_LOCAIS.forEach(t => { d[t] = {}; }); return d; }
 
   // ================= Ícones =================
@@ -133,14 +133,16 @@
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden' && timerSalvar) gravarJa(); });
   window.addEventListener('pagehide', function () { if (timerSalvar) gravarJa(); });
   function lista(t) { return Object.values(S.dados[t] || {}).filter(r => !r.excluidoEm); }
-  function cfg() { return C.mesclarConfig(S.dados.config.geral); }
+  function cfg() { return C.mesclarConfig(configEfetiva()); }
   function ctxCalc(extra) {
     const receitas = Object.assign({}, S.dados.receitas);
     if (extra) receitas[extra.id] = extra;
-    return { ingredientes: S.dados.ingredientes, receitas: receitas, config: S.dados.config.geral };
+    return { ingredientes: S.dados.ingredientes, receitas: receitas, config: configEfetiva() };
   }
 
   function gravarRegistro(tabela, rec) {
+    if (tabela === 'config') delete rec.mediaContasFixas; // valor calculado, não é guardado
+    S.versao = (S.versao || 0) + 1;
     const ant = S.dados[tabela][rec.id];
     const agora = agoraISO();
     rec.atualizadoEm = agora;
@@ -205,12 +207,18 @@
           const loc = S.dados[x.tabela][x.rec.id];
           if (!loc || loc.atualizadoEm !== x.rec.atualizadoEm) { S.dados[x.tabela][x.rec.id] = x.rec; mudouAlgo = true; }
         });
-        (resp.conflitos || []).forEach(function (c) {
+        const semData = r => { const x = Object.assign({}, r || {}); delete x.atualizadoEm; delete x.criadoEm; return JSON.stringify(x, Object.keys(x).sort()); };
+        resp.conflitos = (resp.conflitos || []).filter(function (c) {
           if (c.vencedora) { S.dados[c.tabela][c.id] = c.vencedora; mudouAlgo = true; }
+          return !(c.perdida && c.vencedora && semData(c.perdida) === semData(c.vencedora)); // mesma coisa criada nos dois aparelhos: não é conflito
+        });
+        resp.conflitos.forEach(function (c) {
           if (c.perdida) S.meta.conflitos.push({ id: uid(), tabela: c.tabela, regId: c.id, em: agoraISO(), perdida: c.perdida, vencedora: c.vencedora });
         });
         S.meta.ultimaSync = resp.agora;
-        S.sync.estado = 'ok'; S.sync.msg = '';
+        S.sync.estado = 'ok'; S.sync.msg = ''; S.syncOkNestaSessao = true;
+        if (mudouAlgo) S.versao = (S.versao || 0) + 1;
+        gerarContasRecorrentes();
         salvarLocal();
         if ((resp.conflitos || []).length) toast((resp.conflitos.length === 1 ? 'Um registro foi alterado em dois aparelhos.' : resp.conflitos.length + ' registros foram alterados em dois aparelhos.') + ' Confira a versão que ficou de fora.', 'Ver', () => ir('#/ajustes'));
         if (mudouAlgo && !(S.editor && S.editor.sujo)) { S.editor = null; render(false); }
@@ -321,7 +329,7 @@
     if (r.startsWith('#/receita') || r === '#/ingredientes') return '#/receitas';
     if (r.startsWith('#/pedido') || ['#/agenda', '#/producao', '#/compras', '#/estoque', '#/contagem'].includes(r)) return '#/pedidos';
     if (r.startsWith('#/cliente')) return '#/clientes';
-    if (r === '#/caixa' || r.startsWith('#/lancamento')) return '#/caixa';
+    if (r === '#/caixa' || r.startsWith('#/lancamento') || ['#/contas', '#/receber', '#/reserva', '#/relatorios'].includes(r)) return '#/caixa';
     return NAV.some(n => n.h === r) ? r : '#/inicio';
   }
 
@@ -352,6 +360,7 @@
     const [caminho, ancora] = caminhoAncora.split('#');
     const partes = caminho.split('/');
     const q = new URLSearchParams(busca || '');
+    gerarContasRecorrentes();
     const tipoEditor = { receita: 'receita', pedido: 'pedido', lancamento: 'lancamento', contagem: 'contagem' }[partes[0]];
     if (!S.editor || S.editor.tipo !== tipoEditor) S.editor = null;
     switch (partes[0]) {
@@ -366,6 +375,10 @@
         if (q.get('de') && q.get('ate')) S.compras = Object.assign(S.compras || { orc: false }, { de: q.get('de'), ate: q.get('ate') });
         html = telaCompras(); break;
       case 'caixa': html = telaCaixa(); break;
+      case 'contas': html = telaContas(); break;
+      case 'receber': html = telaReceber(); break;
+      case 'reserva': html = telaReserva(); break;
+      case 'relatorios': html = telaRelatorios(); break;
       case 'estoque': html = telaEstoque(q); break;
       case 'contagem': html = telaContagem(); break;
       case 'lancamento': html = telaEditorLancamento(decodeURIComponent(partes[1] || 'novo'), q); break;
@@ -379,6 +392,8 @@
     hashAnterior = h; S.rota = h;
     if (mudou) window.scrollTo(0, 0); else window.scrollTo(0, y);
     if (ancora && mudou) { const alvo = document.getElementById(ancora); if (alvo) setTimeout(() => alvo.scrollIntoView({ block: 'start' }), 0); }
+    const abaAtual = $('.abas a[aria-current="page"]');
+    if (abaAtual && abaAtual.parentElement.scrollWidth > abaAtual.parentElement.clientWidth) abaAtual.scrollIntoView({ inline: 'nearest', block: 'nearest' });
     if (partes[0] === 'receita') montarEditor();
     if (partes[0] === 'ingredientes') montarFiltroIngredientes();
     if (partes[0] === 'receitas') montarFiltroReceitas();
@@ -457,6 +472,7 @@
     }
 
     h += blocosPedidosInicio();
+    h += blocoContasInicio();
     h += blocoEstoqueInicio();
 
     if (!nRec) {
@@ -467,7 +483,8 @@
       '<a class="stat" href="#/ingredientes" style="text-decoration:none"><div class="n">' + nIng + '</div><div class="r">ingredientes na biblioteca</div></a>' +
       (function () {
         const pm = C.periodoPreset('mes', C.dataISO()), rm = C.resumoCaixa(C.filtrarMovimentos(movsTodos(), pm));
-        return '<a class="stat" href="#/caixa" style="text-decoration:none"><div class="n ' + (rm.saldo < 0 ? 'neg-txt' : '') + '">' + (rm.saldo < 0 ? '−' : '') + C.brl(Math.abs(rm.saldo)) + '</div><div class="r">de saldo no caixa este mês</div></a>';
+        return '<a class="stat" href="#/caixa" style="text-decoration:none"><div class="n ' + (rm.saldo < 0 ? 'neg-txt' : '') + '">' + (rm.saldo < 0 ? '−' : '') + C.brl(Math.abs(rm.saldo)) + '</div><div class="r">de saldo no caixa este mês</div></a>' +
+          (C.numOk(cfg().metaFaturamento) && cfg().metaFaturamento > 0 ? '<a class="stat" href="#/relatorios" style="text-decoration:none"><div class="n">' + C.pct(Math.max(0, rm.entradas) / cfg().metaFaturamento, 0) + '</div><div class="r">da meta de ' + C.brl(cfg().metaFaturamento) + ' recebidos</div></a>' : '');
       })() + '</div>';
 
     if (a.prejuizo.length) {
@@ -1560,7 +1577,8 @@
     'excluir-ped': async function () {
       const p = S.editor.d;
       if (!await confirmar('Excluir pedido?', 'O pedido de <b>' + esc(nomeCliente(p)) + '</b> some da lista e do histórico do cliente. Para manter o registro, prefira cancelar.', 'Excluir pedido', true)) return;
-      excluirRegistro('pedidos', p.id); S.editor = null; toast('Pedido excluído.'); ir('#/pedidos');
+      const devolveu = removerMovsRef('vendaped:' + p.id);
+      excluirRegistro('pedidos', p.id); S.editor = null; toast('Pedido excluído.' + (devolveu ? ' As unidades voltaram para a vitrine.' : '')); ir('#/pedidos');
     },
     'tipo-ent': function (el) {
       const p = S.editor.d; p.tipoEntrega = el.dataset.v;
@@ -1655,7 +1673,7 @@
     const F = filtroCaixa();
     const todos = movsTodos();
     let h = cab('Caixa', 'Tudo o que entrou e saiu. Os pagamentos registrados nos pedidos entram sozinhos.',
-      '<a class="btn sec" href="#/lancamento/novo?tipo=entrada">' + I.mais + 'Nova entrada</a><a class="btn" href="#/lancamento/novo?tipo=saida">' + I.mais + 'Nova saída</a>');
+      '<a class="btn sec" href="#/lancamento/novo?tipo=entrada">' + I.mais + 'Nova entrada</a><a class="btn" href="#/lancamento/novo?tipo=saida">' + I.mais + 'Nova saída</a>') + abas(ABAS_CX, '#/caixa');
     if (!todos.length) {
       return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhum movimento ainda</h2><p>Registre as saídas (compras, contas) e as entradas de fora dos pedidos, como vendas de balcão. Os sinais e pagamentos dos pedidos aparecem aqui sozinhos.</p><div class="acoes" style="justify-content:center"><a class="btn" href="#/lancamento/novo?tipo=saida">' + I.mais + 'Registrar uma saída</a><a class="btn sec" href="#/lancamento/novo?tipo=entrada">' + I.mais + 'Registrar uma entrada</a></div></div>';
     }
@@ -1677,7 +1695,7 @@
     if (F.ate < F.de) return h + '<div class="aviso neg">' + I.alerta + '<div class="txt">A data final vem antes da inicial.</div></div>';
 
     h += '<div class="stats stats-cx"><div class="stat"><div class="r">Entradas</div><div class="n pos-txt">' + C.brl(r.entradas) + '</div></div>' +
-      '<div class="stat"><div class="r">Saídas</div><div class="n neg-txt">' + C.brl(r.saidas) + '</div></div>' +
+      '<div class="stat"><div class="r">Saídas</div><div class="n neg-txt">' + C.brl(r.saidas) + '</div>' + (r.retiradas > 0 ? '<small class="mudo">inclui ' + C.brl(r.retiradas) + ' de pró-labore</small>' : '') + '</div>' +
       '<div class="stat"><div class="r">Saldo ' + (r.saldo < 0 ? '(negativo)' : '') + '</div><div class="n ' + (r.saldo < 0 ? 'neg-txt' : 'pos-txt') + '">' + (r.saldo < 0 ? '−' : '') + C.brl(Math.abs(r.saldo)) + '</div></div></div>';
 
     h += '<details class="bloco mais-filtros"' + (nAtivos || F.maisAberto ? ' open' : '') + '><summary><span>Filtrar por tipo, origem ou categoria</span>' + (nAtivos ? '<span class="chip alerta">' + nAtivos + (nAtivos === 1 ? ' filtro ativo' : ' filtros ativos') + '</span>' : '') + '</summary>' +
@@ -1731,7 +1749,7 @@
 
   // ---------- Editor de lançamento ----------
   function novoLancamento(q) {
-    return { id: uid(), tipo: q && q.get('tipo') === 'saida' ? 'saida' : 'entrada', data: hoje(), valor: null, descricao: '', categoria: '', forma: 'pix', obs: '', itensCompra: [], outros: null };
+    return { id: uid(), tipo: q && q.get('tipo') === 'saida' ? 'saida' : 'entrada', data: hoje(), valor: null, descricao: '', categoria: (q && q.get('categoria')) || '', forma: 'pix', obs: '', itensCompra: [], outros: null };
   }
   function telaEditorLancamento(id, q) {
     if (!S.editor || S.editor.tipo !== 'lancamento' || S.editor.idRota !== id) {
@@ -2146,12 +2164,17 @@
     const corpo = '<form id="f-vit" style="display:flex;flex-direction:column;gap:12px">' + (item ? '<p><b>' + esc(nomeVitrine(item)) + '</b>' + (sd ? ', ' + C.num(sd.qtd) + ' na vitrine' : '') + '</p>' : '') + prodSel +
       '<label class="campo"><span>Quantidade</span><input class="entrada num" name="qtd" inputmode="decimal" required value="1"></label>' +
       (modo === 'add' ? '<label class="campo"><span>Validade (opcional)</span><input class="entrada" type="date" name="validade"></label>' + (modoEstoque() === 'completo' ? '<p class="mudo">No modo completo, os ingredientes usados saem do estoque.</p>' : '') : '') +
-      (modo === 'vender' ? '<div class="linha-campos"><label class="campo"><span>Preço unitário</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="preco" inputmode="decimal" required value="' + inNum(preco) + '"></span></label><label class="campo"><span>Forma</span><select class="entrada" name="forma">' + Object.keys(C.FORMAS_LANCAMENTO).map(k => '<option value="' + k + '">' + C.FORMAS_LANCAMENTO[k] + '</option>').join('') + '</select></label></div><p class="mudo" id="tot-vit"></p><p class="mudo">A venda entra no Caixa como "Venda de balcão".</p>' : '') +
+      (modo === 'vender' ? '<div class="linha-campos"><label class="campo"><span>Preço unitário</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="preco" inputmode="decimal" required value="' + inNum(preco) + '"></span></label><label class="campo"><span>Forma</span><select class="entrada" name="forma">' + Object.keys(C.FORMAS_LANCAMENTO).map(k => '<option value="' + k + '">' + C.FORMAS_LANCAMENTO[k] + '</option>').join('') + '<option value="__fiado__">Fiado (paga depois)</option></select></label></div>' +
+        '<label class="campo" id="campo-cli-vit" hidden><span>Cliente</span><select class="entrada" name="cliente"><option value="">Escolha…</option>' + lista('clientes').sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR')).map(c => '<option value="' + esc(c.id) + '">' + esc(c.nome) + '</option>').join('') + '</select><small>O valor fica em Caixa → A receber até ela pagar.</small></label>' +
+        '<p class="mudo" id="tot-vit"></p><p class="mudo" id="nota-vit">A venda entra no Caixa como "Venda de balcão".</p>' : '') +
       '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">' + { add: 'Colocar na vitrine', vender: 'Registrar venda', perda: 'Registrar perda' }[modo] + '</button></div></form>';
     abrirFolha(titulo, corpo, function (d) {
       const f = $('#f-vit', d);
       function tot() { const t = $('#tot-vit', d); if (t) t.textContent = 'Total: ' + C.brl((C.lerNum(f.qtd.value) || 0) * (C.lerNum(f.preco.value) || 0)); }
-      if (modo === 'vender') { f.addEventListener('input', tot); tot(); }
+      if (modo === 'vender') {
+        f.addEventListener('input', tot); tot();
+        f.forma.addEventListener('change', function () { const fi = f.forma.value === '__fiado__'; $('#campo-cli-vit', d).hidden = !fi; $('#nota-vit', d).hidden = fi; });
+      }
       f.addEventListener('submit', function (ev) {
         ev.preventDefault();
         const n = C.lerNum(f.qtd.value);
@@ -2167,6 +2190,18 @@
         } else if (modo === 'vender') {
           const pu = C.lerNum(f.preco.value);
           if (!(pu > 0)) { toast('Informe o preço.'); return; }
+          if (f.forma.value === '__fiado__') {
+            const cli = S.dados.clientes[f.cliente.value];
+            if (!cli) { toast('Escolha o cliente do fiado.'); return; }
+            const [, rid, vid] = item.split(':');
+            const ped = { id: uid(), clienteId: cli.id, clienteNome: cli.nome, status: 'entregue', tipoEntrega: 'retirada', dataEntrega: hoje(), horaEntrega: '', endereco: '', taxaEntrega: null,
+              itens: [{ id: uid(), tipo: 'rec', receitaId: rid, variacaoId: vid, nome: nomeVitrine(item), qtd: n, precoUnit: pu }], desconto: null, formaPagamento: 'pix', pagamentos: [],
+              obs: 'Venda da vitrine no fiado', historicoStatus: [{ status: 'entregue', em: agoraISO() }] };
+            const cp = calcPed(ped); ped.total = cp.total; ped.pago = 0; ped.restante = cp.total; ped.situacaoPagamento = 'pendente';
+            gravarRegistro('pedidos', ped);
+            registrarMov(item, -n, 'venda', { ref: 'vendaped:' + ped.id, obs: 'Fiado: ' + cli.nome });
+            d.close(); toast('Fiado registrado: ' + C.brl(cp.total) + ' em A receber.'); render(false); return;
+          }
           const l = { id: uid(), tipo: 'entrada', data: hoje(), valor: C.round2(n * pu), categoria: fonteCanonica('Venda de balcão', 'entrada'), descricao: C.num(n) + 'x ' + nomeVitrine(item) + ' (vitrine)', forma: f.forma.value, obs: '', itensCompra: [], vitrine: { item: item, qtd: n } };
           gravarRegistro('lancamentos', l);
           registrarMov(item, -n, 'venda', { ref: 'venda:' + l.id });
@@ -2229,6 +2264,381 @@
     'modo-estoque': function (el) { const c = clone(cfg()); c.estoqueModo = el.dataset.v; gravarRegistro('config', c); render(false); }
   };
 
+  // ================= Financeiro =================
+  const ABAS_CX = [['#/caixa', 'Movimento'], ['#/contas', 'A pagar'], ['#/receber', 'A receber'], ['#/reserva', 'Reserva'], ['#/relatorios', 'Relatórios']];
+  let memoMedia = { chave: '', v: null };
+  function mediaContas() {
+    const chave = (S.versao || 0) + '|' + hoje();
+    if (memoMedia.chave !== chave) memoMedia = { chave: chave, v: C.mediaContasFixas(lista('lancamentos'), hoje()) };
+    return memoMedia.v;
+  }
+  function configEfetiva() { return Object.assign({}, S.dados.config.geral || {}, { mediaContasFixas: mediaContas().media }); }
+  function varChip(v, inverter) {
+    if (!C.numOk(v) || Math.abs(v) < 0.005) return '<span class="chip mudo">igual ao mês anterior</span>';
+    const bom = inverter ? v < 0 : v > 0;
+    return '<span class="chip ' + (inverter === 'neutro' ? '' : bom ? 'pos' : 'neg') + '">' + (v > 0 ? I.sobe : I.desce) + C.pct(Math.abs(v), 0) + ' vs mês anterior</span>';
+  }
+
+  // ---------- Recorrentes: cria a conta do mês ----------
+  let memoRec = '';
+  function gerarContasRecorrentes(forcar) {
+    if (!S.meta.modo) return;
+    // Com planilha, só gera depois de sincronizar nesta sessão (para não duplicar uma conta já paga em outro aparelho)
+    if (S.meta.modo === 'planilha' && !S.syncOkNestaSessao) return;
+    const chave = hoje() + '|' + (S.versao || 0);
+    if (!forcar && memoRec === chave) return;
+    const novas = C.contasRecorrentesAGerar(lista('recorrencias'), S.dados.contasPagar, hoje());
+    novas.forEach(c => gravarRegistro('contasPagar', c));
+    memoRec = hoje() + '|' + (S.versao || 0);
+  }
+
+  // ---------- Contas a pagar ----------
+  function chipConta(st) {
+    if (st.status === 'paga') return '<span class="chip pos">' + I.ok + 'paga em ' + dataDia(st.pagaEm) + '</span>';
+    if (st.status === 'vencida') return '<span class="chip neg">' + I.alerta + (st.dias === -1 ? 'venceu ontem' : 'venceu há ' + (-st.dias) + ' dias') + '</span>';
+    if (st.status === 'hoje') return '<span class="chip alerta">' + I.alerta + 'vence hoje</span>';
+    return '<span class="chip ' + (st.dias <= 3 ? 'alerta' : 'mudo') + '">' + (st.dias === 1 ? 'vence amanhã' : 'vence em ' + st.dias + ' dias') + '</span>';
+  }
+  function cardConta(x) {
+    const c = x.c, st = x.st, paga = st.status === 'paga';
+    return '<div class="item conta"><div class="principal"><div class="nome">' + esc(c.descricao || 'Conta') + '</div><div class="det">' + esc(c.categoria || '') + ', vence ' + dataDia(c.vencimento) + (c.recorrenciaId ? ', todo mês' : '') + '</div></div>' +
+      '<div class="valor">' + C.brl(paga ? st.valorPago : c.valor) + '</div>' +
+      '<div class="chips">' + chipConta(st) + '</div>' +
+      '<div class="acoes acoes-conta">' + (paga ? '<button type="button" class="btn sec fino" data-acao="desfazer-conta" data-id="' + esc(c.id) + '">Desfazer pagamento</button>' : '<button type="button" class="btn fino" data-acao="pagar-conta" data-id="' + esc(c.id) + '">Pagar</button>') +
+      '<button type="button" class="btn sec fino" data-acao="editar-conta" data-id="' + esc(c.id) + '">Editar</button></div></div>';
+  }
+  function telaContas() {
+    gerarContasRecorrentes();
+    const hj = hoje(), L = S.dados.lancamentos;
+    const contas = lista('contasPagar').map(c => ({ c: c, st: C.statusConta(c, L, hj) }));
+    const recs = lista('recorrencias').sort((a, b) => (a.dia || 0) - (b.dia || 0));
+    let h = cab('Contas a pagar', 'As recorrentes (aluguel, luz, internet) aparecem sozinhas todo mês. Ao pagar, a saída vai para o Movimento.',
+      '<button type="button" class="btn sec" data-acao="nova-recorrente">' + I.mais + 'Conta de todo mês</button><button type="button" class="btn" data-acao="nova-conta">' + I.mais + 'Nova conta</button>') + abas(ABAS_CX, '#/contas');
+    if (!contas.length && !recs.length) return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhuma conta ainda</h2><p>Cadastre as contas de todo mês uma vez só; o app cria a conta de cada mês e avisa perto do vencimento.</p><div class="acoes" style="justify-content:center"><button type="button" class="btn" data-acao="nova-recorrente">' + I.mais + 'Conta de todo mês</button><button type="button" class="btn sec" data-acao="nova-conta">' + I.mais + 'Conta avulsa</button></div></div>';
+    const abertas = contas.filter(x => x.st.status !== 'paga').sort((a, b) => String(a.c.vencimento).localeCompare(String(b.c.vencimento)));
+    const vencidas = abertas.filter(x => x.st.status === 'vencida');
+    const semana = abertas.filter(x => x.st.status === 'hoje' || (x.st.dias > 0 && x.st.dias <= 7));
+    const depois = abertas.filter(x => x.st.dias > 7);
+    const pagas = contas.filter(x => x.st.status === 'paga' && x.st.pagaEm >= C.somarDias(hj, -45)).sort((a, b) => String(b.st.pagaEm).localeCompare(String(a.st.pagaEm)));
+    const soma = lst => lst.reduce((s, x) => s + (x.c.valor || 0), 0);
+    const mesAtual = hj.slice(0, 7), doMes = abertas.filter(x => String(x.c.vencimento).slice(0, 7) === mesAtual);
+    h += '<div class="stats stats-cx"><div class="stat"><div class="r">Vencidas</div><div class="n' + (vencidas.length ? ' neg-txt' : '') + '">' + C.brl(soma(vencidas)) + '</div></div>' +
+      '<div class="stat"><div class="r">Próximos 7 dias</div><div class="n">' + C.brl(soma(semana)) + '</div></div>' +
+      '<div class="stat"><div class="r">Em aberto em ' + C.nomeMes(mesAtual).split(' ')[0] + '</div><div class="n">' + C.brl(soma(doMes)) + '</div></div></div>';
+    const bloco = (t, lst, extra) => lst.length ? '<section class="bloco"><h2>' + t + '</h2>' + (extra || '') + '<div class="lista">' + lst.map(cardConta).join('') + '</div></section>' : '';
+    h += bloco('Vencidas', vencidas) + bloco('Vencem nos próximos 7 dias', semana) + bloco('Mais adiante', depois);
+    if (!abertas.length) h += '<div class="aviso pos" style="margin-bottom:16px">' + I.ok + '<div class="txt">Nenhuma conta em aberto.</div></div>';
+    h += bloco('Pagas nos últimos 45 dias', pagas);
+    h += '<details class="bloco mais-filtros"' + (recs.length && !contas.length ? ' open' : '') + '><summary><span>Contas de todo mês (' + recs.filter(r => r.ativa !== false).length + ' ativas)</span></summary>' +
+      (recs.length ? '<div class="lista">' + recs.map(r => '<button type="button" class="item" data-acao="editar-recorrente" data-id="' + esc(r.id) + '"><div class="principal"><div class="nome">' + esc(r.descricao) + '</div><div class="det">' + esc(r.categoria || '') + ', todo dia ' + r.dia + (r.ativa === false ? ', encerrada' : '') + '</div></div><div class="valor">' + C.brl(r.valor) + '</div></button>').join('') + '</div>' : '<p class="mudo">Nenhuma ainda.</p>') +
+      '<button type="button" class="btn sec" style="margin-top:12px" data-acao="nova-recorrente">' + I.mais + 'Conta de todo mês</button></details>';
+    return h;
+  }
+  function campoCategoriaSaida(valor) {
+    return '<label class="campo"><span>Categoria</span><input class="entrada" name="categoria" list="dl-cat-conta" value="' + esc(valor || '') + '" placeholder="Ex.: Contas fixas" autocomplete="off"><datalist id="dl-cat-conta">' + fontesConhecidas('saida').map(f => '<option value="' + esc(f) + '">').join('') + '</datalist><small>As de "Contas fixas" entram na média dos custos fixos.</small></label>';
+  }
+  function folhaConta(id) {
+    const orig = id ? S.dados.contasPagar[id] : null;
+    const c = orig ? clone(orig) : { id: uid(), descricao: '', categoria: C.FONTE_CONTAS_FIXAS, valor: null, vencimento: hoje(), lancamentoId: '', obs: '' };
+    const rec = c.recorrenciaId && S.dados.recorrencias[c.recorrenciaId];
+    const corpo = '<form id="f-conta" style="display:flex;flex-direction:column;gap:12px">' +
+      (rec ? '<p class="mudo">Conta de ' + esc(C.nomeMes(c.competencia || String(c.vencimento).slice(0, 7))) + ' de "' + esc(rec.descricao) + '". O que mudar aqui vale só para este mês.</p>' : '') +
+      '<label class="campo"><span>Descrição</span><input class="entrada" name="descricao" required value="' + esc(c.descricao) + '" placeholder="Ex.: Conserto da batedeira"></label>' +
+      campoCategoriaSaida(c.categoria) +
+      '<div class="linha-campos"><label class="campo"><span>Valor</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="valor" inputmode="decimal" required value="' + inNum(c.valor) + '"></span></label>' +
+      '<label class="campo"><span>Vencimento</span><input class="entrada" type="date" name="vencimento" required value="' + esc(c.vencimento) + '"></label></div>' +
+      '<label class="campo"><span>Observação</span><input class="entrada" name="obs" value="' + esc(c.obs || '') + '" placeholder="Opcional"></label>' +
+      '<div class="rodape-folha">' + (orig ? '<button type="button" class="btn perigo" data-excluir>' + I.lixo + 'Excluir</button>' : '') + '<span style="flex:1"></span><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">Salvar conta</button></div></form>';
+    abrirFolha(orig ? 'Editar conta' : 'Nova conta', corpo, function (d) {
+      const f = $('#f-conta', d);
+      f.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const v = C.lerNum(f.valor.value);
+        if (!f.descricao.value.trim()) { f.descricao.focus(); return; }
+        if (!(v > 0)) { toast('Informe o valor.'); return; }
+        Object.assign(c, { descricao: f.descricao.value.trim(), categoria: fonteCanonica(f.categoria.value, 'saida') || 'Outras saídas', valor: C.round2(v), vencimento: f.vencimento.value, obs: f.obs.value.trim() });
+        gravarRegistro('contasPagar', c); d.close(); toast(orig ? 'Conta salva.' : 'Conta cadastrada.'); render(false);
+      });
+      const ex = $('[data-excluir]', d);
+      if (ex) ex.onclick = async function () {
+        if (C.statusConta(orig, S.dados.lancamentos, hoje()).status === 'paga') { toast('Esta conta está paga. Desfaça o pagamento antes de excluir.'); return; }
+        d.close();
+        if (await confirmar('Excluir conta?', 'Excluir <b>' + esc(orig.descricao) + '</b>.' + (orig.recorrenciaId ? ' Ela não volta a ser criada; os próximos meses continuam normais.' : ''), 'Excluir conta', true)) { excluirRegistro('contasPagar', orig.id); toast('Conta excluída.'); render(false); }
+      };
+    });
+  }
+  function folhaPagarConta(id) {
+    const c = S.dados.contasPagar[id]; if (!c) return;
+    const rec = c.recorrenciaId && S.dados.recorrencias[c.recorrenciaId];
+    const corpo = '<form id="f-pagar" style="display:flex;flex-direction:column;gap:12px"><p><b>' + esc(c.descricao) + '</b>, vence ' + dataDia(c.vencimento) + '</p>' +
+      '<div class="linha-campos"><label class="campo"><span>Valor pago</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="valor" inputmode="decimal" required value="' + inNum(c.valor) + '"></span>' + (rec && rec.variavel ? '<small>Esta conta varia todo mês: confira o valor.</small>' : '') + '</label>' +
+      '<label class="campo"><span>Data do pagamento</span><input class="entrada" type="date" name="data" required value="' + hoje() + '"></label></div>' +
+      '<label class="campo"><span>Forma</span><select class="entrada" name="forma">' + Object.keys(C.FORMAS_LANCAMENTO).map(k => '<option value="' + k + '"' + (k === 'boleto' ? ' selected' : '') + '>' + C.FORMAS_LANCAMENTO[k] + '</option>').join('') + '</select></label>' +
+      '<p class="mudo">A saída vai para o Movimento do Caixa, na categoria "' + esc(c.categoria) + '".</p>' +
+      '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">Registrar pagamento</button></div></form>';
+    abrirFolha('Pagar conta', corpo, function (d) {
+      const f = $('#f-pagar', d);
+      f.valor.select();
+      f.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const v = C.lerNum(f.valor.value);
+        if (!(v > 0)) { toast('Informe o valor pago.'); return; }
+        const l = { id: uid(), tipo: 'saida', data: f.data.value || hoje(), valor: C.round2(v), categoria: c.categoria, descricao: c.descricao, forma: f.forma.value, obs: '', itensCompra: [], contaId: c.id };
+        gravarRegistro('lancamentos', l);
+        const nc = clone(c); nc.lancamentoId = l.id; gravarRegistro('contasPagar', nc);
+        d.close(); toast('Conta paga. A saída está no Movimento.'); render(false);
+      });
+    });
+  }
+  function folhaRecorrente(id) {
+    const orig = id ? S.dados.recorrencias[id] : null;
+    const r = orig ? clone(orig) : { id: uid(), descricao: '', categoria: C.FONTE_CONTAS_FIXAS, valor: null, dia: 10, inicio: hoje().slice(0, 7), ativa: true, variavel: false };
+    const corpo = '<form id="f-rec" style="display:flex;flex-direction:column;gap:12px">' +
+      '<label class="campo"><span>Descrição</span><input class="entrada" name="descricao" required value="' + esc(r.descricao) + '" placeholder="Ex.: Aluguel"></label>' +
+      campoCategoriaSaida(r.categoria) +
+      '<div class="linha-campos"><label class="campo"><span>Valor ' + (orig ? '' : 'de cada mês') + '</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="valor" inputmode="decimal" required value="' + inNum(r.valor) + '"></span></label>' +
+      '<label class="campo"><span>Vence todo dia</span><input class="entrada num" name="dia" inputmode="numeric" required value="' + (r.dia || '') + '"></label></div>' +
+      '<label class="chave"><span class="rot">O valor muda todo mês<small>Luz, água, gás: ao pagar, o app pede para conferir o valor</small></span><input type="checkbox" name="variavel"' + (r.variavel ? ' checked' : '') + '></label>' +
+      (!orig ? '<p class="aviso" id="aviso-rec" hidden></p>' : '') +
+      (!orig ? '<label class="campo"><span>Começa</span><select class="entrada" name="inicio"><option value="' + hoje().slice(0, 7) + '">Neste mês (' + esc(C.nomeMes(hoje().slice(0, 7))) + ')</option><option value="' + C.somarMeses(hoje().slice(0, 7), 1) + '">No mês que vem</option></select></label>' : '') +
+      (orig && r.ativa === false ? '<div class="aviso">' + I.alerta + '<div class="txt">Encerrada' + (r.fim ? ' em ' + esc(C.nomeMes(r.fim)) : '') + '. <button type="button" class="link-btn" data-reativar>Reativar</button></div></div>' : '') +
+      '<div class="rodape-folha">' + (orig && r.ativa !== false ? '<button type="button" class="btn perigo" data-encerrar>Encerrar</button>' : '') + '<span style="flex:1"></span><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">Salvar</button></div></form>';
+    abrirFolha(orig ? 'Conta de todo mês' : 'Nova conta de todo mês', corpo, function (d) {
+      const f = $('#f-rec', d);
+      const aviso = $('#aviso-rec', d);
+      function conferirDia() {
+        if (!aviso) return;
+        const dia = Math.round(C.lerNum(f.dia.value)), diaHoje = Number(hoje().slice(8));
+        const passou = f.inicio.value === hoje().slice(0, 7) && dia >= 1 && dia < diaHoje;
+        aviso.hidden = !passou;
+        if (passou) aviso.textContent = 'O dia ' + dia + ' deste mês já passou: a conta de ' + C.nomeMes(hoje().slice(0, 7)).split(' ')[0] + ' vai aparecer como vencida. Se ela já foi paga, escolha "No mês que vem" ou marque como paga depois.';
+      }
+      if (aviso) { f.addEventListener('input', conferirDia); f.addEventListener('change', conferirDia); conferirDia(); }
+      f.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const v = C.lerNum(f.valor.value), dia = Math.round(C.lerNum(f.dia.value));
+        if (!f.descricao.value.trim()) { f.descricao.focus(); return; }
+        if (!(v > 0)) { toast('Informe o valor.'); return; }
+        if (!(dia >= 1 && dia <= 31)) { toast('O dia do vencimento vai de 1 a 31.'); return; }
+        Object.assign(r, { descricao: f.descricao.value.trim(), categoria: fonteCanonica(f.categoria.value, 'saida') || C.FONTE_CONTAS_FIXAS, valor: C.round2(v), dia: dia, variavel: f.variavel.checked });
+        if (!orig) r.inicio = f.inicio.value;
+        gravarRegistro('recorrencias', r);
+        // a conta deste mês, se ainda não foi paga, acompanha a mudança
+        const doMes = S.dados.contasPagar['rec:' + r.id + ':' + hoje().slice(0, 7)];
+        if (orig && doMes && !doMes.excluidoEm && C.statusConta(doMes, S.dados.lancamentos, hoje()).status !== 'paga') {
+          const nc = clone(doMes); Object.assign(nc, { descricao: r.descricao, categoria: r.categoria, valor: r.valor, vencimento: C.vencimentoNoMes(nc.competencia, r.dia) }); gravarRegistro('contasPagar', nc);
+        }
+        gerarContasRecorrentes(true);
+        d.close(); toast(orig ? 'Conta de todo mês salva.' : 'Pronto: a conta de cada mês vai aparecer sozinha.'); render(false);
+      });
+      const enc = $('[data-encerrar]', d);
+      if (enc) enc.onclick = async function () {
+        d.close();
+        if (!await confirmar('Encerrar esta conta?', 'O app para de criar <b>' + esc(orig.descricao) + '</b> a partir do mês que vem. As contas já criadas continuam.', 'Encerrar', true)) return;
+        const nr = clone(orig); nr.ativa = false; nr.fim = hoje().slice(0, 7); gravarRegistro('recorrencias', nr); toast('Conta encerrada.'); render(false);
+      };
+      const re = $('[data-reativar]', d);
+      if (re) re.onclick = function () { const nr = clone(orig); nr.ativa = true; delete nr.fim; gravarRegistro('recorrencias', nr); gerarContasRecorrentes(true); d.close(); toast('Reativada.'); render(false); };
+    });
+  }
+
+  // ---------- A receber (fiado) ----------
+  function telaReceber() {
+    const ar = C.aReceber(lista('pedidos'), ctxCalc(), nomeCliente);
+    S.gruposReceber = ar.grupos;
+    let h = cab('A receber', 'Fiado e valores em aberto dos pedidos, por cliente. Ao registrar o pagamento no pedido, ele entra no Movimento.') + abas(ABAS_CX, '#/receber');
+    h += '<div class="stats stats-cx" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="stat"><div class="r">Entregue, falta pagar</div><div class="n' + (ar.entregue > 0 ? ' neg-txt' : '') + '">' + C.brl(ar.entregue) + '</div></div>' +
+      '<div class="stat" style="grid-column:auto"><div class="r">De pedidos ainda não entregues</div><div class="n">' + C.brl(ar.aberto) + '</div></div></div>';
+    if (!ar.grupos.length) return h + '<div class="bloco vazio">' + I.emblema + '<h2>Ninguém devendo</h2><p>Quando um pedido é entregue sem o pagamento completo, ou uma venda da vitrine fica no fiado, aparece aqui.</p></div>';
+    h += ar.grupos.map(function (g, i) {
+      const cli = g.clienteId && S.dados.clientes[g.clienteId];
+      return '<section class="bloco"><div class="cab-bloco"><h2>' + esc(g.nome) + '</h2><b class="' + (g.entregue > 0 ? 'neg-txt' : '') + '">' + C.brl(g.total) + '</b></div>' +
+        (g.entregue > 0 && g.entregue < g.total ? '<p class="mudo" style="margin:-4px 0 8px">' + C.brl(g.entregue) + ' de pedidos já entregues</p>' : '') +
+        '<div class="lista">' + g.itens.map(it => '<a class="item" href="#/pedido/' + encodeURIComponent(it.pedidoId) + '"><div class="principal"><div class="nome">Pedido de ' + esc(dataCurta(it.data)) + '</div><div class="det">' + esc(it.resumo) + '</div></div><div class="valor">falta ' + C.brl(it.restante) + '<small>de ' + C.brl(it.total) + '</small></div><div class="chips">' + chipStatus(it.status) + '</div></a>').join('') + '</div>' +
+        '<div class="acoes" style="margin-top:12px">' + (g.entregue > 0 ? '<button type="button" class="btn fino" data-acao="cobrar" data-i="' + i + '">' + I.mensagem + 'Cobrar no WhatsApp</button>' : '') + (cli ? '<a class="btn sec fino" href="#/cliente/' + encodeURIComponent(cli.id) + '">Ver cliente</a>' : '') + '</div></section>';
+    }).join('');
+    return h;
+  }
+  function folhaCobranca(g) {
+    const cli = g.clienteId && S.dados.clientes[g.clienteId];
+    const tel = C.telefoneWhats(cli && cli.telefone);
+    const corpo = (!tel ? '<div class="aviso">' + I.alerta + '<div class="txt">Cliente sem telefone com DDD. O WhatsApp vai pedir para escolher o contato.</div></div>' : '') +
+      '<label class="campo"><span>Texto (pode editar antes de enviar)</span><textarea class="entrada" id="txt-cob" rows="11"></textarea></label>' +
+      '<div class="rodape-folha"><button type="button" class="btn sec" id="copiar-cob">' + I.copiar + 'Copiar texto</button><a class="btn" id="abrir-cob" target="_blank" rel="noopener">' + I.mensagem + 'Abrir no WhatsApp</a></div>';
+    abrirFolha('Cobrar ' + String(g.nome || '').split(' ')[0], corpo, function (d) {
+      const ta = $('#txt-cob', d), a = $('#abrir-cob', d);
+      ta.value = C.textoCobranca(g, configEfetiva(), hoje());
+      const link = () => { a.href = 'https://wa.me/' + tel + '?text=' + encodeURIComponent(ta.value); };
+      ta.addEventListener('input', link); link();
+      $('#copiar-cob', d).onclick = () => copiarTexto(ta.value);
+    });
+  }
+
+  // ---------- Reserva e pró-labore ----------
+  function telaReserva() {
+    const mes = hoje().slice(0, 7), cf = cfg();
+    const lim = C.limitesMes(mes);
+    const rm = C.resumoCaixa(C.filtrarMovimentos(movsTodos(), lim));
+    const rv = C.resumoReserva(lista('lancamentos'), configEfetiva(), mes, rm.entradas);
+    const plDesejado = C.proLaboreDesejado(configEfetiva());
+    const retiradasMes = movsTodos().filter(m => m.tipo === 'saida' && C.semAcento(m.fonte) === C.semAcento(C.FONTE_PROLABORE) && m.data >= lim.de && m.data <= lim.ate);
+    let h = cab('Reserva e pró-labore', 'O que guardar de cada venda e o que você retira para si.') + abas(ABAS_CX, '#/reserva');
+    h += '<section class="bloco"><h2>Reserva</h2><p class="explica">O app não mexe no seu dinheiro: ele calcula quanto separar. Quando transferir para a poupança ou guardar o valor, registre aqui.</p>' +
+      '<div class="destaque-reserva"><div class="r">Guardado até hoje</div><div class="v">' + C.brl(rv.saldo) + '</div>' +
+      (rv.meta ? '<div class="meta-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(Math.min(100, rv.saldo / rv.meta * 100)) + '"><i style="width:' + Math.min(100, Math.max(0, rv.saldo / rv.meta * 100)).toFixed(1) + '%"></i></div><div class="r">' + C.pct(Math.max(0, rv.saldo) / rv.meta, 0) + ' da meta de ' + C.brl(rv.meta) + '</div>' : '') + '</div>' +
+      '<h3 style="margin-top:18px">Em ' + esc(C.nomeMes(mes).split(' ')[0]) + '</h3><dl class="resultados" style="margin-top:8px"><div><dt>Entradas do mês</dt><dd>' + C.brl(rm.entradas) + '</dd></div><div><dt>Separar (' + C.num(rv.pct) + '%)</dt><dd>' + C.brl(rv.sugeridoMes) + '</dd></div><div><dt>Já guardado</dt><dd>' + C.brl(rv.guardadoMes) + '</dd></div><div class="' + (rv.faltaGuardar > 0 ? 'neg' : 'pos') + '"><dt>Falta guardar</dt><dd>' + C.brl(rv.faltaGuardar) + '</dd></div></dl>' +
+      '<div class="acoes" style="margin-top:14px">' + (rv.faltaGuardar > 0 ? '<button type="button" class="btn" data-acao="reserva-mov" data-v="guardar">Guardei ' + C.brl(rv.faltaGuardar) + '</button>' : '<button type="button" class="btn sec" data-acao="reserva-mov" data-v="guardar">' + I.mais + 'Guardar um valor</button>') + '<button type="button" class="btn sec" data-acao="reserva-mov" data-v="usar">Usar da reserva</button></div>' +
+      '<div class="grade" style="margin-top:16px"><label class="campo"><span>Separar de cada entrada</span><span class="com-prefixo"><input class="entrada num" data-cfg="reservaPct" data-n inputmode="decimal" value="' + inNum(cf.reservaPct) + '"><i class="dir">%</i></span></label>' +
+      '<label class="campo"><span>Meta da reserva (opcional)</span><span class="com-prefixo"><i>R$</i><input class="entrada num" data-cfg="reservaMeta" data-n inputmode="decimal" value="' + inNum(cf.reservaMeta) + '" placeholder="sem meta"></span></label></div>' +
+      (rv.historico.length ? '<h3 style="margin-top:18px">Histórico</h3><ul class="historico">' + rv.historico.slice(0, 12).map(l => '<li><span>' + dataDia(l.data) + ', ' + (l.valor > 0 ? 'guardado' : 'usado') + (l.descricao && l.descricao !== 'Reserva' ? ' <small class="mudo">' + esc(l.descricao) + '</small>' : '') + '</span><span><b class="' + (l.valor > 0 ? 'pos-txt' : 'neg-txt') + '">' + (l.valor > 0 ? '+' : '−') + C.brl(Math.abs(l.valor)) + '</b><button type="button" class="link-btn mini" data-acao="reserva-rem" data-id="' + esc(l.id) + '" aria-label="Remover registro">remover</button></span></li>').join('') + '</ul>' : '') + '</section>';
+    const ret = retiradasMes.reduce((s, m) => s + m.valor, 0);
+    h += '<section class="bloco"><h2>Pró-labore</h2><p class="explica">O que você retira para si. Aparece separado das despesas da doceria, para o lucro do mês mostrar quanto o negócio rendeu antes de você se pagar.</p>' +
+      '<div class="destaque-reserva"><div class="r">Retirado em ' + esc(C.nomeMes(mes).split(' ')[0]) + '</div><div class="v">' + C.brl(ret) + '</div>' +
+      (C.numOk(plDesejado) && plDesejado > 0 ? '<div class="meta-barra"><i style="width:' + Math.min(100, ret / plDesejado * 100).toFixed(1) + '%"></i></div><div class="r">' + C.pct(ret / plDesejado, 0) + ' dos ' + C.brl(plDesejado) + ' que você definiu em Ajustes → Mão de obra</div>' : '<div class="r">Defina o salário desejado em Ajustes → Mão de obra para acompanhar.</div>') + '</div>' +
+      (retiradasMes.length ? '<ul class="historico" style="margin-top:12px">' + retiradasMes.map(m => '<li><span>' + dataDia(m.data) + (m.descricao && m.descricao !== C.FONTE_PROLABORE ? ', ' + esc(m.descricao) : '') + '</span><b>' + C.brl(m.valor) + '</b></li>').join('') + '</ul>' : '') +
+      '<div class="acoes" style="margin-top:14px"><a class="btn" href="#/lancamento/novo?tipo=saida&categoria=' + encodeURIComponent(C.FONTE_PROLABORE) + '">' + I.mais + 'Registrar retirada</a></div></section>';
+    return h;
+  }
+  function folhaReserva(tipo) {
+    const mes = hoje().slice(0, 7);
+    const rm = C.resumoCaixa(C.filtrarMovimentos(movsTodos(), C.limitesMes(mes)));
+    const rv = C.resumoReserva(lista('lancamentos'), configEfetiva(), mes, rm.entradas);
+    const guardar = tipo === 'guardar';
+    const corpo = '<form id="f-res" style="display:flex;flex-direction:column;gap:12px"><div class="linha-campos"><label class="campo"><span>Valor</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="valor" inputmode="decimal" required value="' + (guardar && rv.faltaGuardar > 0 ? inNum(rv.faltaGuardar) : '') + '"></span></label><label class="campo"><span>Data</span><input class="entrada" type="date" name="data" value="' + hoje() + '"></label></div>' +
+      '<label class="campo"><span>' + (guardar ? 'Onde guardou (opcional)' : 'Para quê (opcional)') + '</span><input class="entrada" name="obs" placeholder="' + (guardar ? 'Ex.: poupança' : 'Ex.: forno novo') + '"></label>' +
+      (!guardar ? '<p class="mudo">Disponível na reserva: ' + C.brl(rv.saldo) + '.</p>' : '') +
+      '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">' + (guardar ? 'Registrar que guardei' : 'Registrar uso') + '</button></div></form>';
+    abrirFolha(guardar ? 'Guardar na reserva' : 'Usar da reserva', corpo, function (d) {
+      const f = $('#f-res', d);
+      f.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const v = C.lerNum(f.valor.value);
+        if (!(v > 0)) { toast('Informe o valor.'); return; }
+        if (!guardar && v > rv.saldo + 0.004 && !confirm('O valor passa do que está na reserva (' + C.brl(rv.saldo) + '). Registrar mesmo assim?')) return;
+        gravarRegistro('lancamentos', { id: uid(), tipo: 'reserva', data: f.data.value || hoje(), valor: C.round2(guardar ? v : -v), categoria: 'Reserva', descricao: f.obs.value.trim() || 'Reserva', forma: '', obs: '', itensCompra: [] });
+        d.close(); toast(guardar ? 'Registrado na reserva.' : 'Uso da reserva registrado.'); render(false);
+      });
+    });
+  }
+
+  // ---------- Relatórios ----------
+  function telaRelatorios() {
+    const mes = S.relMes || (S.relMes = hoje().slice(0, 7));
+    const nMeses = S.relN || 6;
+    const ctx = ctxCalc(), cf = cfg();
+    const dados = { pedidos: lista('pedidos'), lancamentos: lista('lancamentos'), nome: nomeCliente };
+    const at = C.resumoMes(mes, dados, ctx), an = C.resumoMes(C.somarMeses(mes, -1), dados, ctx);
+    const lim = C.limitesMes(mes), mesCorrente = mes === hoje().slice(0, 7);
+    const prods = C.produtosVendidos(dados.pedidos, dados.lancamentos, ctx, lim.de, lim.ate);
+    S.relRanking = prods;
+    let h = cab('Relatórios', 'Como a doceria foi no mês, comparado com o anterior.') + abas(ABAS_CX, '#/relatorios');
+    h += '<div class="cal-cab" style="margin-bottom:14px"><button type="button" class="btn-icone" data-acao="rel-mes" data-v="-1" aria-label="Mês anterior">' + I.voltar + '</button><h2>' + esc(C.nomeMes(mes).charAt(0).toUpperCase() + C.nomeMes(mes).slice(1)) + '</h2><button type="button" class="btn-icone" data-acao="rel-mes" data-v="1" aria-label="Próximo mês"' + (mesCorrente ? ' disabled' : '') + '>' + I.seta + '</button></div>';
+    if (mesCorrente) h += '<p class="mudo" style="margin:-6px 0 14px;text-align:center">Mês em andamento: os números ainda vão mudar.</p>';
+    const card = (rot, v, vAnt, inverter, extra) => '<div class="stat"><div class="r">' + rot + '</div><div class="n' + (v < 0 ? ' neg-txt' : '') + '">' + (v < 0 ? '−' : '') + C.brl(Math.abs(v)) + '</div>' + (extra || '') + varChip(C.variacaoPct(v, vAnt), inverter) + '</div>';
+    h += '<div class="stats stats-rel">' + card('Recebido', at.recebido, an.recebido) + card('Despesas', at.despesas, an.despesas, true, '<small class="mudo">sem o pró-labore</small>') + card('Lucro da doceria', at.lucro, an.lucro, false, '<small class="mudo">recebido − despesas</small>') +
+      card('Pró-labore', at.retiradas, an.retiradas, 'neutro') + card('Guardado na reserva', at.guardado, an.guardado) +
+      '<div class="stat"><div class="r">Pedidos entregues</div><div class="n">' + at.pedidosEntregues + '</div>' + (at.ticketMedio ? '<small class="mudo">' + C.brl(at.ticketMedio) + ' por pedido, em média</small>' : '') + varChip(C.variacaoPct(at.pedidosEntregues, an.pedidosEntregues)) + '</div></div>';
+
+    // Metas
+    const metaF = C.numOk(cf.metaFaturamento) && cf.metaFaturamento > 0 ? cf.metaFaturamento : null, metaL = C.numOk(cf.metaLucro) && cf.metaLucro > 0 ? cf.metaLucro : null;
+    const barraMeta = function (rot, feito, meta) {
+      const proj = mesCorrente ? C.projecaoMes(feito, mes, hoje()) : null;
+      const p = Math.max(0, feito / meta);
+      return '<div class="linha-meta"><div class="cab-bloco" style="margin:0"><b>' + rot + '</b><span>' + C.brl(feito) + ' de ' + C.brl(meta) + '</span></div><div class="meta-barra"><i style="width:' + Math.min(100, p * 100).toFixed(1) + '%"></i></div>' +
+        '<small class="mudo">' + C.pct(p, 0) + ' da meta' + (C.numOk(proj) ? '. No ritmo atual, fecha o mês em ' + C.brl(proj) + (proj >= meta ? ' (bate a meta)' : ' (faltariam ' + C.brl(meta - proj) + ')') : '') + '</small></div>';
+    };
+    h += '<section class="bloco"><div class="cab-bloco"><h2>Metas do mês</h2><button type="button" class="btn sec fino" data-acao="definir-metas">' + (metaF || metaL ? 'Mudar metas' : 'Definir metas') + '</button></div>' +
+      (metaF || metaL ? (metaF ? barraMeta('Recebido', at.recebido, metaF) : '') + (metaL ? barraMeta('Lucro da doceria', at.lucro, metaL) : '') : '<p class="mudo">Defina quanto quer receber e lucrar por mês; o app mostra o progresso e se o ritmo atual chega lá.</p>') + '</section>';
+
+    // Ponto de equilíbrio
+    let base = prods, rotBase = 'deste mês';
+    if (!prods.some(p => p.receita > 0)) { const l3 = { de: C.limitesMes(C.somarMeses(mes, -3)).de, ate: C.limitesMes(C.somarMeses(mes, -1)).ate }; base = C.produtosVendidos(dados.pedidos, dados.lancamentos, ctx, l3.de, l3.ate); rotBase = 'dos 3 meses anteriores'; }
+    const vendas = base.reduce((s, p) => s + p.receita, 0), cv = base.reduce((s, p) => s + p.custoVariavel, 0);
+    const fixos = C.totalFixos(cf), pl = C.proLaboreDesejado(configEfetiva()) || 0;
+    const pe = C.pontoEquilibrio(fixos, pl, vendas, cv);
+    const vendidoMes = prods.reduce((s, p) => s + p.receita, 0);
+    h += '<section class="bloco"><h2>Ponto de equilíbrio</h2>' + (pe.valor
+      ? '<p>Para pagar as contas fixas (' + C.brl(fixos) + ') e o seu pró-labore (' + C.brl(pl) + '), a doceria precisa vender cerca de <b>' + C.brl(pe.valor) + ' por mês</b>.</p>' +
+        '<div class="meta-barra" style="margin-top:12px"><i style="width:' + Math.min(100, vendidoMes / pe.valor * 100).toFixed(1) + '%"></i></div><small class="mudo">Vendido neste mês: ' + C.brl(vendidoMes) + ' (' + C.pct(vendidoMes / pe.valor, 0) + ')</small>' +
+        '<details class="ajuda"><summary>Como é feita essa conta?</summary><div><p>De cada R$ 100 vendidos ' + rotBase + ', cerca de ' + C.brl(pe.margemContribuicao * 100) + ' sobram depois de ingredientes, perdas e embalagens. É a margem de contribuição (' + C.pct(pe.margemContribuicao, 0) + ').</p><p>Dividindo o que precisa ser coberto todo mês (' + C.brl(pe.custosACobrir) + ') por essa margem, chega-se ao valor de vendas que empata as contas. As contas fixas vêm de Ajustes → Custos fixos (' + (cf.custosFixosFonte === 'contas' && C.numOk(cf.mediaContasFixas) ? 'média das contas pagas' : 'valores preenchidos à mão') + ').</p></div></details>'
+      : '') + (pe.valor && !(fixos > 0) && C.numOk(mediaContas().media) ? '<div class="aviso" style="margin-top:12px">' + I.alerta + '<div class="txt">Os custos fixos preenchidos à mão estão em R$ 0,00. Pelas contas pagas, a média é ' + C.brl(mediaContas().media) + ' por mês. <a href="#/ajustes#fixos">Escolher em Ajustes</a></div></div>' : '') + (pe.valor ? '' : '<p class="mudo">' + (!(fixos > 0) && !(pl > 0) ? 'Preencha os custos fixos e o pró-labore em Ajustes para calcular.' : 'Precisa de vendas entregues (pedidos ou vitrine) para calcular a margem.') + '</p>') + '</section>';
+
+    // Mais vendidos e mais lucrativos
+    const topQ = prods.slice().sort((a, b) => b.qtd - a.qtd).slice(0, 8), topL = prods.filter(p => C.numOk(p.lucro)).sort((a, b) => b.lucro - a.lucro).slice(0, 8);
+    const ranking = (t, lst, val, fmt, cls) => { const mx = Math.max(0.01, ...lst.map(val)); return '<section class="bloco"><h2>' + t + '</h2>' + (lst.length ? '<div class="por-fonte">' + lst.map(p => '<div class="linha-fonte" style="cursor:default"><span class="nome-f">' + esc(p.nome) + '</span><span class="val-f">' + fmt(p) + '</span><span class="barra-f"><i class="' + cls + '" style="width:' + (Math.max(0, val(p)) / mx * 100).toFixed(1) + '%"></i></span></div>').join('') + '</div>' : '<p class="mudo">Nenhuma venda entregue neste mês.</p>') + '</section>'; };
+    h += '<div class="grade-fontes">' + ranking('Mais vendidos', topQ, p => p.qtd, p => C.num(p.qtd) + ' <small>' + C.brl(p.receita) + '</small>', 'b-ouro') +
+      ranking('Mais lucrativos', topL, p => p.lucro, p => C.brl(p.lucro) + ' <small>' + C.num(p.qtd) + ' vendidos</small>', 'b-ent') + '</div>';
+
+    // Comparação entre meses
+    const serie = []; for (let i = nMeses - 1; i >= 0; i--) serie.push(C.resumoMes(C.somarMeses(mes, -i), dados, ctx));
+    S.relSerie = serie;
+    const mx = Math.max(0.01, ...serie.map(r => Math.max(r.recebido, r.despesas)));
+    h += '<section class="bloco"><div class="cab-bloco"><h2>Comparação entre meses</h2><div class="seg" role="group" aria-label="Quantos meses"><button type="button" data-acao="rel-n" data-v="6" aria-pressed="' + (nMeses === 6) + '">6 meses</button><button type="button" data-acao="rel-n" data-v="12" aria-pressed="' + (nMeses === 12) + '">12 meses</button></div></div>' +
+      '<div class="legenda" style="margin:6px 0"><span><i class="b-ent"></i>Recebido</span><span><i class="b-sai"></i>Despesas</span></div>' +
+      '<div class="graf graf-meses">' + serie.map(r => '<div class="graf-col" title="' + esc(C.nomeMes(r.mes) + ': recebido ' + C.brl(r.recebido) + ', despesas ' + C.brl(r.despesas) + ', lucro ' + C.brl(r.lucro)) + '"><span class="graf-barras"><i class="b-ent" style="height:' + (r.recebido / mx * 100).toFixed(1) + '%"></i><i class="b-sai" style="height:' + (r.despesas / mx * 100).toFixed(1) + '%"></i></span><span class="graf-rot">' + esc(C.nomeMes(r.mes, true).split('/')[0]) + '</span></div>').join('') + '</div>' +
+      '<div class="tabela-rola"><table class="tabela-meses"><thead><tr><th scope="col">Mês</th><th scope="col">Recebido</th><th scope="col">Despesas</th><th scope="col">Lucro</th><th scope="col">Pró-labore</th><th scope="col">Pedidos</th></tr></thead><tbody>' +
+      serie.slice().reverse().map(r => '<tr' + (r.mes === mes ? ' class="atual"' : '') + '><th scope="row">' + esc(C.nomeMes(r.mes, true)) + '</th><td>' + C.brl(r.recebido) + '</td><td>' + C.brl(r.despesas) + '</td><td class="' + (r.lucro < 0 ? 'neg-txt' : '') + '">' + (r.lucro < 0 ? '−' : '') + C.brl(Math.abs(r.lucro)) + '</td><td>' + C.brl(r.retiradas) + '</td><td>' + r.pedidosEntregues + '</td></tr>').join('') + '</tbody></table></div>' +
+      '<div class="acoes" style="margin-top:14px"><button type="button" class="btn sec" data-acao="rel-csv">' + I.baixar + 'Exportar relatório (CSV)</button></div></section>';
+    return h;
+  }
+  function folhaMetas() {
+    const cf = cfg();
+    const corpo = '<form id="f-metas" style="display:flex;flex-direction:column;gap:12px"><p class="mudo">Valem para todos os meses até você mudar.</p>' +
+      '<label class="campo"><span>Receber por mês</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="fat" inputmode="decimal" value="' + inNum(cf.metaFaturamento) + '" placeholder="sem meta"></span></label>' +
+      '<label class="campo"><span>Lucro da doceria por mês</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="luc" inputmode="decimal" value="' + inNum(cf.metaLucro) + '" placeholder="sem meta"></span><small>Recebido menos despesas, antes do pró-labore.</small></label>' +
+      '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">Salvar metas</button></div></form>';
+    abrirFolha('Metas do mês', corpo, function (d) {
+      $('#f-metas', d).addEventListener('submit', function (ev) {
+        ev.preventDefault(); const f = ev.target;
+        const c = clone(cfg()); const a = C.lerNum(f.fat.value), b = C.lerNum(f.luc.value);
+        c.metaFaturamento = a > 0 ? a : null; c.metaLucro = b > 0 ? b : null;
+        gravarRegistro('config', c); d.close(); toast('Metas salvas.'); render(false);
+      });
+    });
+  }
+
+  // ---------- Início: contas perto do vencimento ----------
+  function blocoContasInicio() {
+    const hj = hoje();
+    const lst = lista('contasPagar').map(c => ({ c: c, st: C.statusConta(c, S.dados.lancamentos, hj) }))
+      .filter(x => x.st.status === 'vencida' || x.st.status === 'hoje' || (x.st.status === 'aberta' && x.st.dias <= 3))
+      .sort((a, b) => String(a.c.vencimento).localeCompare(String(b.c.vencimento)));
+    if (!lst.length) return '';
+    return '<section class="bloco"><div class="cab-bloco"><h2>Contas a pagar</h2><a class="link-btn" href="#/contas">Ver todas</a></div><div class="lista">' +
+      lst.slice(0, 6).map(x => '<a class="item" href="#/contas"><div class="principal"><div class="nome">' + esc(x.c.descricao) + '</div><div class="det">vence ' + dataDia(x.c.vencimento) + '</div></div><div class="valor">' + C.brl(x.c.valor) + '</div><div class="chips">' + chipConta(x.st) + '</div></a>').join('') + '</div></section>';
+  }
+
+  const ACOES_FIN = {
+    'nova-conta': function () { folhaConta(null); },
+    'editar-conta': function (el) { folhaConta(el.dataset.id); },
+    'pagar-conta': function (el) { folhaPagarConta(el.dataset.id); },
+    'desfazer-conta': async function (el) {
+      const c = S.dados.contasPagar[el.dataset.id]; if (!c) return;
+      if (!await confirmar('Desfazer pagamento?', 'A conta volta a ficar em aberto e a saída de ' + C.brl((S.dados.lancamentos[c.lancamentoId] || {}).valor) + ' sai do Movimento.', 'Desfazer pagamento', true)) return;
+      if (c.lancamentoId && S.dados.lancamentos[c.lancamentoId]) excluirRegistro('lancamentos', c.lancamentoId);
+      const nc = clone(c); nc.lancamentoId = ''; gravarRegistro('contasPagar', nc); toast('Pagamento desfeito.'); render(false);
+    },
+    'nova-recorrente': function () { folhaRecorrente(null); },
+    'editar-recorrente': function (el) { folhaRecorrente(el.dataset.id); },
+    cobrar: function (el) { const g = (S.gruposReceber || [])[+el.dataset.i]; if (g) folhaCobranca(g); },
+    'reserva-mov': function (el) { folhaReserva(el.dataset.v); },
+    'reserva-rem': async function (el) {
+      const l = S.dados.lancamentos[el.dataset.id]; if (!l) return;
+      if (!await confirmar('Remover registro?', 'Remover ' + (l.valor > 0 ? 'o depósito' : 'o uso') + ' de ' + C.brl(Math.abs(l.valor)) + ' de ' + dataDia(l.data) + '.', 'Remover', true)) return;
+      excluirRegistro('lancamentos', l.id); toast('Registro removido.'); render(false);
+    },
+    'rel-mes': function (el) { const n = C.somarMeses(S.relMes || hoje().slice(0, 7), Number(el.dataset.v)); if (n > hoje().slice(0, 7)) return; S.relMes = n; render(false); },
+    'rel-n': function (el) { S.relN = Number(el.dataset.v); render(false); },
+    'rel-csv': function () {
+      const blob = new Blob([C.csvRelatorio(S.relSerie || [], (S.relRanking || []).slice().sort((a, b) => b.receita - a.receita))], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'relatorio-' + (S.relMes || hoje().slice(0, 7)) + '.csv';
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      toast('Relatório exportado.');
+    },
+    'definir-metas': folhaMetas,
+    'fonte-fixos': function (el) { const c = clone(cfg()); c.custosFixosFonte = el.dataset.v; gravarRegistro('config', c); render(false); }
+  };
+
   // ================= Ajustes =================
   function telaAjustes() {
     const cf = cfg();
@@ -2257,11 +2667,18 @@
     // Custos fixos
     h += '<h2 class="titulo-grupo">Ajustes da doceria</h2><p class="mudo" style="margin:-4px 0 10px">Estes ajustes valem para todos os aparelhos. Custos fixos, mão de obra, preços e taxas e dados da doceria aparecem por extenso na aba Ajustes da planilha.</p>' +
       '<div id="estado-ajustes" class="aviso" role="status" style="margin-bottom:16px"></div>';
-    h += '<section class="bloco" id="fixos"><h2>Custos fixos do mês</h2><p class="explica">Contas que chegam todo mês, vendendo ou não. O total é dividido pelas horas de produção e entra no custo de cada receita conforme o tempo dela. Quando o módulo de caixa chegar, estes valores virão das despesas lançadas.</p><div class="linhas-edit">' +
+    h += '<section class="bloco" id="fixos"><h2>Custos fixos do mês</h2><p class="explica">Contas que chegam todo mês, vendendo ou não. O total é dividido pelas horas de produção e entra no custo de cada receita conforme o tempo dela.</p>' + (function () {
+        const mc = mediaContas(), manual = (cf.custosFixos || []).reduce((s, c) => s + (C.numOk(c.valor) ? c.valor : 0), 0), fonte = cf.custosFixosFonte === 'contas' ? 'contas' : 'manual';
+        return '<div class="fontes-fixos" role="group" aria-label="Qual valor usar no preço">' +
+          '<button type="button" class="opcao-fixos" data-acao="fonte-fixos" data-v="manual" aria-pressed="' + (fonte === 'manual') + '"><span class="r">Preenchido à mão</span><span class="v">' + C.brl(manual) + '</span><small>a lista abaixo</small></button>' +
+          '<button type="button" class="opcao-fixos" data-acao="fonte-fixos" data-v="contas" aria-pressed="' + (fonte === 'contas') + '"><span class="r">Pelas contas pagas</span><span class="v">' + (C.numOk(mc.media) ? C.brl(mc.media) : '—') + '</span><small>' + (mc.considerados ? 'média de ' + (mc.considerados === 1 ? '1 mês' : mc.considerados + ' meses') + ' (' + mc.meses.filter(m => m.total > 0).map(m => C.nomeMes(m.mes, true)).join(', ') + ')' : 'sem "Contas fixas" pagas nos últimos 3 meses') + '</small></button></div>' +
+          '<p class="mudo" style="margin:8px 0 14px">Toque para escolher qual entra no preço das receitas. Em uso: <b>' + (fonte === 'contas' ? (C.numOk(mc.media) ? 'contas pagas' : 'à mão (ainda não há contas pagas para a média)') : 'à mão') + '</b>.</p>' +
+          (mc.itens.length ? '<details class="ajuda" style="margin-bottom:14px"><summary>Ver a média por conta</summary><div><ul class="historico">' + mc.itens.map(i => '<li><span>' + esc(i.descricao) + '</span><span>' + C.brl(i.media) + '</span></li>').join('') + '</ul><p class="mudo" style="margin-top:8px">Vem das saídas da categoria "Contas fixas" nos 3 meses completos anteriores.</p></div></details>' : '');
+      })() + '<div class="linhas-edit"><div class="linhas-edit">' +
       cf.custosFixos.map((c, i) => '<div class="linha-edit" style="grid-template-columns:1fr 150px auto"><input class="entrada" data-cfg="custosFixos.' + i + '.nome" value="' + esc(c.nome) + '" aria-label="Nome do custo"><span class="com-prefixo"><i>R$</i><input class="entrada num" data-cfg="custosFixos.' + i + '.valor" data-n inputmode="decimal" value="' + inNum(c.valor) + '" aria-label="Valor de ' + esc(c.nome) + '"></span><button type="button" class="btn-icone" data-acao="rem-fixo" data-i="' + i + '" aria-label="Remover ' + esc(c.nome) + '">' + I.lixo + '</button></div>').join('') +
       '</div><button type="button" class="btn sec" style="margin-top:12px" data-acao="add-fixo">' + I.mais + 'Adicionar custo fixo</button>' +
       '<div class="grade" style="margin-top:16px"><label class="campo"><span>Horas de produção por mês</span><span class="com-prefixo"><input class="entrada num" data-cfg="horasMes" data-n inputmode="decimal" value="' + inNum(cf.horasMes) + '"><i class="dir">h</i></span><small>Ex.: 5 dias por semana, 6 horas por dia: cerca de 120 h.</small></label>' +
-      '<div class="campo"><span>Resultado</span><p style="font-weight:700;padding-top:10px">' + C.brl(C.totalFixos(cf)) + ' por mês, ' + (C.numOk(C.fixosPorHora(cf)) ? C.brl(C.fixosPorHora(cf)) + ' por hora' : 'defina as horas') + '</p></div></div></section>';
+      '<div class="campo"><span>Resultado usado no preço</span><p style="font-weight:700;padding-top:10px">' + C.brl(C.totalFixos(cf)) + ' por mês, ' + (C.numOk(C.fixosPorHora(cf)) ? C.brl(C.fixosPorHora(cf)) + ' por hora' : 'defina as horas') + '</p></div></div></section>';
 
     // Mão de obra
     const mo = cf.maoObra;
@@ -2443,7 +2860,7 @@
     },
     'dispensar-conflito': function (el) { S.meta.conflitos = S.meta.conflitos.filter(x => x.id !== el.dataset.id); salvarLocal(); render(false); }
   };
-  Object.assign(ACOES, ACOES_PED, ACOES_CAIXA, ACOES_ESTOQUE);
+  Object.assign(ACOES, ACOES_PED, ACOES_CAIXA, ACOES_ESTOQUE, ACOES_FIN);
   function resumoDiferencas(a, b) {
     a = a || {}; b = b || {};
     const ks = Array.from(new Set(Object.keys(a).concat(Object.keys(b)))).filter(k => !/Em$|^id$|^historico$/.test(k));
