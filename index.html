@@ -381,6 +381,85 @@ h2.titulo-grupo { font-size: calc(24px * var(--fs)); margin: 28px 0 8px; }
 }
 @media (min-width: 700px) { .abas a { flex: 0 0 auto; padding: 10px 16px; } }
 
+
+/* ============ Caixa ============ */
+@media (max-width: 899px) { .nav-baixo a[href="#/ajustes"] { display: none; } }
+.pos-txt { color: var(--pos); }
+.neg-txt { color: var(--neg); }
+.stats-cx .n { font-size: calc(22px * var(--fs)); }
+.mais-filtros > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-height: 44px; cursor: pointer; list-style: none; font-weight: 700; }
+.mais-filtros > summary::-webkit-details-marker { display: none; }
+.mais-filtros > summary > span:first-child { flex: 1 1 0; min-width: 0; }
+.mais-filtros > summary::before { flex: none; }
+.mais-filtros > summary::before { content: ''; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s; margin: 0 4px; }
+.mais-filtros[open] > summary::before { transform: rotate(45deg); }
+.mais-filtros[open] > summary { margin-bottom: 6px; }
+.stats-cx { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 700px) { .stats-cx { grid-template-columns: 1fr 1fr; } .stats-cx .stat:last-child { grid-column: 1 / -1; } }
+
+.stats-cx .r { font-weight: 600; }
+.grupo-fontes { margin-top: 14px; }
+.rot-fontes { display: block; font-size: calc(12.5px * var(--fs)); font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.chips-filtro { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-filtro { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-forte); background: var(--surface); color: var(--ink-2); font-weight: 600; font-size: calc(13px * var(--fs)); }
+.chip-filtro[aria-pressed="true"] { background: var(--choco); border-color: var(--choco); color: var(--on-choco); }
+:root[data-theme="dark"] .chip-filtro[aria-pressed="true"] { background: var(--on-choco); color: var(--choco); border-color: var(--on-choco); }
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] .chip-filtro[aria-pressed="true"] { background: var(--on-choco); color: var(--choco); border-color: var(--on-choco); } }
+.chip-filtro svg { width: 14px; height: 14px; }
+.legenda { display: flex; gap: 14px; font-size: calc(12.5px * var(--fs)); color: var(--muted); font-weight: 600; }
+.legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.legenda i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.b-ent { background: var(--pos); }
+.b-sai { background: var(--neg); }
+.graf { display: flex; align-items: stretch; gap: 2px; height: 190px; margin-top: 8px; }
+.graf-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border: 0; background: none; padding: 0; border-radius: 6px; }
+.graf-col:hover .graf-barras, .graf-col.sel .graf-barras { background: var(--surface-2); }
+.graf-barras { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 1px; border-bottom: 1px solid var(--line-forte); border-radius: 6px 6px 0 0; }
+.graf-barras i { width: 42%; max-width: 16px; border-radius: 3px 3px 0 0; }
+.graf-rot { height: 20px; padding-top: 4px; font-size: calc(10.5px * var(--fs)); color: var(--muted); white-space: nowrap; overflow: visible; text-align: center; }
+#graf-info { margin-top: 10px; min-height: 1.5em; }
+.grade-fontes { display: grid; gap: 0 16px; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
+.por-fonte { display: flex; flex-direction: column; gap: 4px; }
+.linha-fonte { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; width: 100%; text-align: left; padding: 10px 10px 12px; border: 1px solid transparent; border-radius: 12px; background: none; color: var(--ink); }
+.linha-fonte:hover { background: var(--surface-2); }
+.linha-fonte[aria-pressed="true"] { border-color: var(--line-forte); background: var(--surface-2); }
+.linha-fonte .nome-f { font-weight: 600; display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.linha-fonte .val-f { font-weight: 700; text-align: right; white-space: nowrap; }
+.linha-fonte .val-f small { color: var(--muted); font-weight: 500; }
+.linha-fonte .barra-f { grid-column: 1 / -1; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.linha-fonte[aria-pressed="true"] .barra-f { background: var(--surface); }
+.linha-fonte .barra-f i { display: block; height: 100%; border-radius: 999px; }
+.item.mov .valor { font-size: calc(15.5px * var(--fs)); white-space: nowrap; }
+.linha-compra { grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); align-items: end; }
+.linha-compra .nome-av, .linha-compra .info-compra { grid-column: 1 / -1; }
+.linha-compra .btn-icone { justify-self: end; }
+.info-compra { font-size: calc(13px * var(--fs)); color: var(--muted); margin: 0; }
+.info-compra:empty { display: none; }
+.total-lanc { font-family: var(--serif); font-size: calc(30px * var(--fs)); font-weight: 600; }
+
+
+/* ============ Estoque e produção de vários dias ============ */
+.linha-check .principal small.por-dia { display: block; margin-top: 4px; color: var(--ink-2); line-height: 1.45; }
+.lista-contagem { display: flex; flex-direction: column; gap: 8px; }
+.linha-contagem { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 8px 12px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.linha-contagem .principal { display: flex; flex-direction: column; min-width: 0; }
+.linha-contagem .principal small { color: var(--muted); font-size: calc(12.5px * var(--fs)); }
+.linha-contagem .entrada.num { min-width: 0; }
+.linha-contagem select { flex: 0 1 auto; min-width: 0; }
+@media (max-width: 560px) { .linha-contagem { grid-template-columns: 1fr; } }
+.tabela-compras.com-estoque .tc-cab, .tabela-compras.com-estoque .tc-lin { grid-template-columns: minmax(0, 2fr) 1fr 1fr 1.3fr 1fr; }
+.tc-ok { color: var(--muted); }
+.tc-ok b { font-weight: 600; }
+@media (max-width: 640px) {
+  .tabela-compras.com-estoque .tc-lin { grid-template-columns: 1fr 1fr; }
+  .tabela-compras.com-estoque .tc-lin span[data-r="Comprar"] { grid-column: auto; }
+}
+
+
+.faixa-prod { font-weight: 700; color: var(--ink-2); margin: -6px 0 10px; }
+.vazio .faixa-prod { margin: -2px 0 8px; }
+.acoes .btn { white-space: normal; text-align: center; }
+
 /* ============ Logo ============ */
 .logo-selo, .logo-estrela { display: inline-block; flex: none; background-color: var(--ouro); -webkit-mask: center / contain no-repeat; mask: center / contain no-repeat; }
 .logo-selo { -webkit-mask-image: url(icons/logo-selo.png); mask-image: url(icons/logo-selo.png); }
@@ -457,6 +536,18 @@ h2.titulo-grupo { font-size: calc(24px * var(--fs)); margin: 28px 0 8px; }
 .dados-cli { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px 20px; margin: 0; }
 .dados-cli dt { font-size: calc(12.5px * var(--fs)); font-weight: 700; color: var(--muted); }
 .dados-cli dd { margin: 2px 0 0; white-space: pre-wrap; }
+
+/* ============ Ajustes finais (ficam por último para valer sobre as regras anteriores) ============ */
+.seg { border-radius: 22px; }
+@media (max-width: 520px) {
+  .abas { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0; overflow: visible; }
+  .abas a { flex: none; padding: 10px 2px; font-size: calc(12.5px * var(--fs)); }
+}
+@media (max-width: 360px) {
+  .abas a { font-size: calc(11.5px * var(--fs)); }
+  .topo .marca b { display: none; }
+}
+@media (max-width: 340px) { .abas a { font-size: calc(11px * var(--fs)); padding: 10px 0; } }
 </style>
 </head>
 <body>

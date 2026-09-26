@@ -79,6 +79,8 @@
     margemPadrao: 40,
     margemAlerta: 25,
     sinalPadraoPct: 50,
+    estoqueModo: 'manual',
+    diasAlertaValidade: 3,
     doceria: { nome: 'Doce Astro', instagram: '@doce.astro', telefone: '(11) 91220-9162', email: 'doceastro@gmail.com' }
   };
 
@@ -485,6 +487,231 @@
       '\n\nPedido: ' + brl(calc.total) + '\nPago até agora: ' + brl(calc.pago) + '\n' + saldo + '\n\nObrigada!' + assinatura;
   }
 
+
+  // ---------- Caixa: entradas e saídas ----------
+  const FORMAS_LANCAMENTO = {
+    pix: 'Pix', dinheiro: 'Dinheiro', debito: 'Cartão de débito', credito: 'Cartão de crédito',
+    app: 'Aplicativo de entrega', boleto: 'Boleto ou transferência'
+  };
+  const FONTE_PEDIDOS = 'Pedidos';
+  const ORIGENS_PADRAO = ['Venda de balcão', 'iFood / aplicativo', 'Encomenda fora do app', 'Outras entradas'];
+  const CATEGORIAS_PADRAO = ['Ingredientes', 'Embalagens', 'Contas fixas', 'Equipamentos e utensílios', 'Entrega e transporte', 'Taxas e tarifas', 'Marketing', 'Outras saídas'];
+
+  // Junta os pagamentos dos pedidos (entradas automáticas) com os lançamentos feitos à mão.
+  function movimentos(pedidos, lancamentos, nomeDoPedido) {
+    const lst = [];
+    (pedidos || []).forEach(function (p) {
+      if (p.excluidoEm) return;
+      (p.pagamentos || []).forEach(function (pg) {
+        if (!numOk(pg.valor) || !pg.data) return;
+        lst.push({
+          id: 'pg:' + p.id + ':' + (pg.id || pg.data), tipo: 'entrada', data: pg.data, valor: pg.valor,
+          descricao: (pg.tipo === 'sinal' ? 'Sinal' : 'Pagamento') + ' do pedido de ' + (nomeDoPedido ? nomeDoPedido(p) : (p.clienteNome || 'cliente')),
+          fonte: FONTE_PEDIDOS, forma: pg.forma || '', pedidoId: p.id, pedidoCancelado: p.status === 'cancelado', automatico: true
+        });
+      });
+    });
+    (lancamentos || []).forEach(function (l) {
+      if (l.excluidoEm || !numOk(l.valor) || !l.data) return;
+      lst.push({
+        id: l.id, tipo: l.tipo === 'saida' ? 'saida' : 'entrada', data: l.data, valor: l.valor,
+        descricao: l.descricao || l.categoria || '', fonte: l.categoria || (l.tipo === 'saida' ? 'Outras saídas' : 'Outras entradas'),
+        forma: l.forma || '', lancamentoId: l.id, nItensCompra: (l.itensCompra || []).length
+      });
+    });
+    return lst.sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(a.descricao).localeCompare(String(b.descricao)));
+  }
+  function semAcento(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+  // filtro: { de, ate, tipo: 'todos'|'entrada'|'saida', fontes: [], busca }
+  function filtrarMovimentos(lst, f) {
+    f = f || {};
+    const fontes = (f.fontes || []).map(semAcento);
+    const q = semAcento(f.busca);
+    return lst.filter(m =>
+      (!f.de || m.data >= f.de) && (!f.ate || m.data <= f.ate) &&
+      (!f.tipo || f.tipo === 'todos' || m.tipo === f.tipo) &&
+      (!fontes.length || fontes.indexOf(semAcento(m.fonte)) >= 0) &&
+      (!q || semAcento(m.descricao + ' ' + m.fonte).indexOf(q) >= 0));
+  }
+  function resumoCaixa(lst) {
+    const r = { entradas: 0, saidas: 0, saldo: 0, n: lst.length, porFonte: { entrada: {}, saida: {} } };
+    lst.forEach(function (m) {
+      if (m.tipo === 'entrada') r.entradas += m.valor; else r.saidas += m.valor;
+      const pf = r.porFonte[m.tipo];
+      pf[m.fonte] = (pf[m.fonte] || 0) + m.valor;
+    });
+    r.entradas = round2(r.entradas); r.saidas = round2(r.saidas); r.saldo = round2(r.entradas - r.saidas);
+    return r;
+  }
+  function periodoPreset(preset, hoje) {
+    const [y, m] = hoje.split('-').map(Number);
+    const fimMes = (yy, mm) => dataISO(new Date(yy, mm, 0));
+    switch (preset) {
+      case 'hoje': return { de: hoje, ate: hoje };
+      case '7dias': return { de: somarDias(hoje, -6), ate: hoje };
+      case '30dias': return { de: somarDias(hoje, -29), ate: hoje };
+      case 'mesPassado': { const d = new Date(y, m - 2, 1); return { de: dataISO(d), ate: fimMes(d.getFullYear(), d.getMonth() + 1) }; }
+      case 'ano': return { de: y + '-01-01', ate: y + '-12-31' };
+      default: return { de: hoje.slice(0, 8) + '01', ate: fimMes(y, m) }; // mês atual
+    }
+  }
+  // Agrupa por dia (até 31 dias), semana (até ~6 meses) ou mês, para o gráfico.
+  function agruparPeriodo(lst, de, ate) {
+    const dias = diasEntre(de, ate) + 1;
+    const modo = dias <= 31 ? 'dia' : dias <= 186 ? 'semana' : 'mes';
+    const baldes = [], idx = {};
+    function chave(iso) {
+      if (modo === 'dia') return iso;
+      if (modo === 'mes') return iso.slice(0, 7);
+      const d = paraData(iso); d.setDate(d.getDate() - d.getDay()); return dataISO(d); // semana começa no domingo
+    }
+    let cur = de;
+    while (cur <= ate) {
+      const k = chave(cur);
+      if (!(k in idx)) {
+        idx[k] = baldes.length;
+        const d = paraData(cur);
+        const rot = modo === 'mes' ? ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][d.getMonth()] + (de.slice(0, 4) !== ate.slice(0, 4) ? '/' + String(d.getFullYear()).slice(2) : '')
+          : String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+        baldes.push({ chave: k, rotulo: rot, entradas: 0, saidas: 0 });
+      }
+      cur = somarDias(cur, 1);
+    }
+    lst.forEach(function (m) {
+      if (m.data < de || m.data > ate) return;
+      const b = baldes[idx[chave(m.data)]]; if (!b) return;
+      if (m.tipo === 'entrada') b.entradas += m.valor; else b.saidas += m.valor;
+    });
+    return { modo: modo, baldes: baldes };
+  }
+  function csvMovimentos(lst) {
+    const c = v => { const s = String(v === null || v === undefined ? '' : v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const linhas = [['Data', 'Tipo', 'Fonte', 'Descrição', 'Forma de pagamento', 'Valor'].join(';')];
+    lst.slice().sort((a, b) => String(a.data).localeCompare(String(b.data))).forEach(function (m) {
+      linhas.push([m.data.split('-').reverse().join('/'), m.tipo === 'entrada' ? 'Entrada' : 'Saída', c(m.fonte), c(m.descricao),
+        c(FORMAS_LANCAMENTO[m.forma] || m.forma || ''), ((m.tipo === 'saida' ? -1 : 1) * m.valor).toFixed(2).replace('.', ',')].join(';'));
+    });
+    return '\ufeff' + linhas.join('\r\n');
+  }
+
+  // Compra de ingrediente: grava o ponto no histórico (na data da compra) e
+  // o preço atual passa a ser o do ponto mais recente. Reeditar a mesma compra
+  // substitui o ponto dela em vez de acrescentar outro.
+  function recalcularPrecoAtual(ing) {
+    const h = ing.historico || [];
+    const ult = h[h.length - 1];
+    if (ult && numOk(ult.valorPago) && numOk(ult.qtdEmbalagem) && ult.unidade) {
+      ing.valorPago = ult.valorPago; ing.qtdEmbalagem = ult.qtdEmbalagem; ing.unidade = ult.unidade;
+    }
+    return ing;
+  }
+  function aplicarCompra(ing, it, data, chave) {
+    const un = normUn(it.unidade || ing.unidade);
+    const tamBase = paraBase(it.qtdEmbalagem, un);
+    if (!(it.embalagens > 0) || !(tamBase > 0) || !(numOk(it.valor) && it.valor >= 0) || !mesmaFamilia(un, ing.unidade)) return null;
+    const novo = JSON.parse(JSON.stringify(ing));
+    const precoEmb = Math.round(it.valor / it.embalagens * 10000) / 10000;
+    const ponto = { data: data + 'T12:00:00', valorPago: precoEmb, qtdEmbalagem: it.qtdEmbalagem, unidade: un, porBase: precoEmb / tamBase, compra: chave };
+    const h = (novo.historico || []).filter(x => x.compra !== chave);
+    h.push(ponto);
+    h.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+    novo.historico = h;
+    const antes = custoIngrediente(ing);
+    recalcularPrecoAtual(novo);
+    const depois = custoIngrediente(novo);
+    return { ing: novo, precoAtualMudou: h[h.length - 1] === ponto, variacao: antes && depois && antes.porBase > 0 ? depois.porBase / antes.porBase - 1 : null };
+  }
+  function removerCompra(ing, chave) {
+    if (!(ing.historico || []).some(x => x.compra === chave)) return null;
+    const novo = JSON.parse(JSON.stringify(ing));
+    novo.historico = novo.historico.filter(x => x.compra !== chave);
+    return recalcularPrecoAtual(novo);
+  }
+
+
+  // ---------- Estoque ----------
+  // Cada entrada, uso, contagem ou perda é um registro próprio (não se sobrescrevem
+  // entre aparelhos). A quantidade de um item é a soma dos registros dele.
+  const MOTIVOS_ESTOQUE = {
+    compra: 'Compra', producao: 'Usado na produção', ajuste: 'Contagem', entrada: 'Entrada',
+    perda: 'Perda ou descarte', venda: 'Venda', vitrine: 'Feito para a vitrine'
+  };
+  const STATUS_COM_BAIXA = ['producao', 'pronto', 'entregue'];
+  function chaveIng(id) { return 'ing:' + id; }
+  function chaveVitrine(receitaId, variacaoId) { return 'vit:' + receitaId + ':' + variacaoId; }
+  // Validade: a mais próxima entre os lotes que entraram desde a última vez que o
+  // item zerou. Uma contagem com validade substitui as anteriores.
+  function saldosEstoque(movs) {
+    const s = {};
+    (movs || []).filter(m => !m.excluidoEm && numOk(m.qtd) && m.item)
+      .sort((a, b) => String(a.data).localeCompare(String(b.data)) || String(a.criadoEm || '').localeCompare(String(b.criadoEm || '')))
+      .forEach(function (m) {
+        const x = s[m.item] || (s[m.item] = { item: m.item, qtd: 0, validades: [], ultimaData: null, n: 0 });
+        x.qtd += m.qtd; x.n++; x.ultimaData = m.data;
+        if (x.qtd <= 1e-9) x.validades = [];
+        else if (m.motivo === 'ajuste' && m.validade) x.validades = [m.validade];
+        else if (m.qtd > 0 && m.validade) x.validades.push(m.validade);
+      });
+    Object.values(s).forEach(function (x) {
+      x.qtd = Math.round(x.qtd * 1e6) / 1e6;
+      x.validade = x.qtd > 0 && x.validades.length ? x.validades.slice().sort()[0] : null;
+      delete x.validades;
+    });
+    return s;
+  }
+  // Quanto de cada ingrediente um pedido consome (base: g, ml ou un)
+  function baixaDoPedido(p, ctx) {
+    const nx = necessidades([p], ctx), out = {};
+    Object.values(nx.compras).forEach(c => { if (c.qtdBase > 0) out[c.ingredienteId] = c.qtdBase; });
+    return out;
+  }
+  function assinaturaItensPedido(p) {
+    return (p.itens || []).filter(it => it.tipo === 'rec').map(it => it.receitaId + '|' + it.variacaoId + '|' + it.qtd).sort().join(';');
+  }
+  // O que fazer com a baixa de estoque de um pedido ao salvar
+  function acaoBaixaPedido(statusAntes, statusDepois, temBaixa, assinaturaMudou) {
+    const dentro = s => STATUS_COM_BAIXA.indexOf(s) >= 0;
+    if (statusDepois === 'cancelado') return 'nada';            // o que já foi usado continua usado
+    if (dentro(statusDepois)) {
+      if (temBaixa) return assinaturaMudou ? 'atualizar' : 'nada';
+      return dentro(statusAntes) ? 'nada' : 'criar';             // pedidos antigos não descontam retroativamente
+    }
+    return temBaixa ? 'remover' : 'nada';                        // voltou para orçamento ou confirmado
+  }
+  // Lista de compras descontando o que já tem
+  function comprasComEstoque(compras, saldos, ingredientes) {
+    return Object.values(compras).map(function (c) {
+      const ing = ingredientes[c.ingredienteId];
+      const tem = Math.max(0, (saldos[chaveIng(c.ingredienteId)] || {}).qtd || 0);
+      const falta = Math.max(0, c.qtdBase - tem);
+      const emb = ing ? paraBase(ing.qtdEmbalagem, ing.unidade) : null;
+      const r = Object.assign({}, c, { tem: tem, falta: falta });
+      r.embalagensFalta = emb > 0 ? Math.ceil(falta / emb - 1e-9) : null;
+      r.custoFalta = emb > 0 ? r.embalagensFalta * (ing.valorPago || 0) : null;
+      return r;
+    });
+  }
+  function situacaoEstoque(saldo, minimo, hoje, diasAlerta) {
+    const q = saldo ? saldo.qtd : 0;
+    const r = { qtd: q, negativo: q < -1e-9, abaixoMinimo: numOk(minimo) && minimo > 0 && q < minimo, validade: saldo ? saldo.validade : null };
+    if (r.validade && hoje) {
+      const d = diasEntre(hoje, r.validade);
+      r.diasParaVencer = d; r.vencido = d < 0; r.venceLogo = d >= 0 && d <= (diasAlerta || 0);
+    }
+    return r;
+  }
+  // Produção em vários dias: quanto de cada receita, dia a dia
+  function producaoPorDia(pedidos, ctx) {
+    const porDia = {};
+    (pedidos || []).forEach(p => { (porDia[p.dataEntrega] = porDia[p.dataEntrega] || []).push(p); });
+    const out = {};
+    Object.keys(porDia).sort().forEach(function (dia) {
+      const nx = necessidades(porDia[dia], ctx);
+      Object.values(nx.producao).forEach(x => { (out[x.receitaId] = out[x.receitaId] || []).push({ dia: dia, qtdBase: x.qtdBase }); });
+    });
+    return out;
+  }
+
   const API = {
     UNIDADES, normUn, unidadesDaFamilia, paraBase, mesmaFamilia,
     numOk, lerNum, brl, num, pct,
@@ -492,7 +719,11 @@
     markupParaMargem, margemParaMarkup, custoIngrediente,
     calcularReceita, calcularVariacao, alvoDaReceita, receitasQueDependemDe, variacaoPreco,
     dataISO, paraData, somarDias, diasEntre, round2, FORMAS_PAGAMENTO, STATUS_PEDIDO, taxaFormaPct,
-    calcularPedido, necessidades, qtdLegivel, telefoneWhats, dataFalada, horaFalada, textoWhats
+    calcularPedido, necessidades, qtdLegivel, telefoneWhats, dataFalada, horaFalada, textoWhats,
+    FORMAS_LANCAMENTO, FONTE_PEDIDOS, ORIGENS_PADRAO, CATEGORIAS_PADRAO, movimentos, filtrarMovimentos, resumoCaixa,
+    periodoPreset, agruparPeriodo, csvMovimentos, aplicarCompra, removerCompra, semAcento,
+    MOTIVOS_ESTOQUE, STATUS_COM_BAIXA, chaveIng, chaveVitrine, saldosEstoque, baixaDoPedido, assinaturaItensPedido,
+    acaoBaixaPedido, comprasComEstoque, situacaoEstoque, producaoPorDia
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else raiz.Calc = API;

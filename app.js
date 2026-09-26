@@ -2,8 +2,8 @@
 (function () {
   'use strict';
   const C = window.Calc;
-  const VERSAO = '2.0.0';
-  const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos'];
+  const VERSAO = '4.0.0';
+  const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos', 'lancamentos', 'estoque'];
   function dadosVazios() { const d = {}; TABELAS_LOCAIS.forEach(t => { d[t] = {}; }); return d; }
 
   // ================= Ícones =================
@@ -33,6 +33,8 @@
     receitaDentro: p('M4 7h16M4 12h10M4 17h7M17 14l3 3-3 3'),
     pedidos: p('M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1zM8 6H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2M9 12l2 2 4-4'),
     clientes: p('M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 20v-1a4 4 0 0 0-3-3.9M15.5 4.2a3.5 3.5 0 0 1 0 6.6'),
+    loja: p('M4 10v10h16V10M3 4h18l-1.5 6a3 3 0 0 1-5.5.8 3 3 0 0 1-5 0A3 3 0 0 1 4.5 10zM9.5 20v-5h5v5'),
+    caixa: p('M3 7a2 2 0 0 1 2-2h13v4M3 7v11a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2zM16 14h.01'),
     mensagem: p('M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z')
   };
   function p(d) { return '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + d + '"/></svg>'; }
@@ -293,7 +295,8 @@
   // ================= Navegação =================
   const NAV = [
     { h: '#/inicio', t: 'Início', i: I.inicio },
-    { h: '#/pedidos', t: 'Pedidos', i: I.pedidos },
+    { h: '#/pedidos', t: 'Loja', i: I.loja },
+    { h: '#/caixa', t: 'Caixa', i: I.caixa },
     { h: '#/receitas', t: 'Receitas', i: I.receitas },
     { h: '#/clientes', t: 'Clientes', i: I.clientes },
     { h: '#/ajustes', t: 'Ajustes', i: I.ajustes }
@@ -314,10 +317,11 @@
   window.addEventListener('beforeunload', function (e) { if (S.editor && S.editor.sujo) { e.preventDefault(); e.returnValue = ''; } });
 
   function secaoAtiva(h) {
-    const r = h.split('?')[0];
+    const r = h.split('?')[0].replace(/^(#\/[^#]*)#.*$/, '$1');
     if (r.startsWith('#/receita') || r === '#/ingredientes') return '#/receitas';
-    if (r.startsWith('#/pedido') || ['#/agenda', '#/producao', '#/compras'].includes(r)) return '#/pedidos';
+    if (r.startsWith('#/pedido') || ['#/agenda', '#/producao', '#/compras', '#/estoque', '#/contagem'].includes(r)) return '#/pedidos';
     if (r.startsWith('#/cliente')) return '#/clientes';
+    if (r === '#/caixa' || r.startsWith('#/lancamento')) return '#/caixa';
     return NAV.some(n => n.h === r) ? r : '#/inicio';
   }
 
@@ -327,7 +331,7 @@
     return '<div class="app">' +
       '<aside class="lateral"><a class="marca-lat" href="#/inicio"><span class="logo-selo" role="img" aria-label="Doce Astro, doces artesanais"></span></a>' +
       '<nav aria-label="Seções">' + links + '</nav>' +
-      '<div class="rodape-lat">Espaço Nave ' + VERSAO + '<br>Estoque, caixa e relatórios chegam nas próximas etapas.</div></aside>' +
+      '<div class="rodape-lat">Espaço Nave ' + VERSAO + '<br>Contas a pagar e relatórios chegam nas próximas etapas.</div></aside>' +
       '<div class="principal-col"><header class="topo"><a class="marca" href="#/inicio"><span class="emblema"><span class="logo-estrela"></span></span><b>Doce Astro</b></a><span class="espaco"></span>' +
       '<button type="button" class="pilula-sync" id="pilula-sync" data-acao="pilula"></button>' +
       '<a class="btn-icone" href="#/ajustes" aria-label="Ajustes">' + I.ajustes + '</a></header>' +
@@ -344,10 +348,11 @@
     const raiz = $('#raiz');
     if (!S.meta.modo) { raiz.innerHTML = telaBoasVindas(); S.rota = h; return; }
     let html;
-    const [caminho, busca] = h.replace(/^#\//, '').split('?');
+    const [caminhoAncora, busca] = h.replace(/^#\//, '').split('?');
+    const [caminho, ancora] = caminhoAncora.split('#');
     const partes = caminho.split('/');
     const q = new URLSearchParams(busca || '');
-    const tipoEditor = { receita: 'receita', pedido: 'pedido' }[partes[0]];
+    const tipoEditor = { receita: 'receita', pedido: 'pedido', lancamento: 'lancamento', contagem: 'contagem' }[partes[0]];
     if (!S.editor || S.editor.tipo !== tipoEditor) S.editor = null;
     switch (partes[0]) {
       case 'receitas': html = telaReceitas(); break;
@@ -360,6 +365,10 @@
       case 'compras':
         if (q.get('de') && q.get('ate')) S.compras = Object.assign(S.compras || { orc: false }, { de: q.get('de'), ate: q.get('ate') });
         html = telaCompras(); break;
+      case 'caixa': html = telaCaixa(); break;
+      case 'estoque': html = telaEstoque(q); break;
+      case 'contagem': html = telaContagem(); break;
+      case 'lancamento': html = telaEditorLancamento(decodeURIComponent(partes[1] || 'novo'), q); break;
       case 'clientes': html = telaClientes(); break;
       case 'cliente': html = telaCliente(decodeURIComponent(partes[1] || '')); break;
       case 'ajustes': html = telaAjustes(); break;
@@ -369,12 +378,16 @@
     atualizarPilula();
     hashAnterior = h; S.rota = h;
     if (mudou) window.scrollTo(0, 0); else window.scrollTo(0, y);
+    if (ancora && mudou) { const alvo = document.getElementById(ancora); if (alvo) setTimeout(() => alvo.scrollIntoView({ block: 'start' }), 0); }
     if (partes[0] === 'receita') montarEditor();
     if (partes[0] === 'ingredientes') montarFiltroIngredientes();
     if (partes[0] === 'receitas') montarFiltroReceitas();
     if (partes[0] === 'pedido') montarEditorPedido();
     if (partes[0] === 'pedidos') montarFiltroPedidos();
     if (partes[0] === 'clientes') montarFiltroClientes();
+    if (partes[0] === 'lancamento') montarEditorLancamento();
+    if (partes[0] === 'estoque') montarFiltroEstoque();
+    if (partes[0] === 'contagem') montarContagem();
   }
 
   // ================= Boas-vindas =================
@@ -444,6 +457,7 @@
     }
 
     h += blocosPedidosInicio();
+    h += blocoEstoqueInicio();
 
     if (!nRec) {
       h += '<div class="bloco vazio">' + I.emblema + '<h2>Cadastre sua primeira receita</h2><p>Com a receita cadastrada, o app calcula o custo de cada doce, sugere o preço e avisa quando algum produto dá prejuízo.</p><a class="btn" href="#/receita/nova">' + I.mais + 'Nova receita</a></div>';
@@ -451,7 +465,10 @@
 
     h += '<div class="stats"><a class="stat" href="#/receitas" style="text-decoration:none"><div class="n">' + nRec + '</div><div class="r">receitas cadastradas</div></a>' +
       '<a class="stat" href="#/ingredientes" style="text-decoration:none"><div class="n">' + nIng + '</div><div class="r">ingredientes na biblioteca</div></a>' +
-      '<a class="stat" href="#/ajustes" style="text-decoration:none"><div class="n">' + (C.numOk(C.fixosPorHora(cf)) && C.totalFixos(cf) > 0 ? C.brl(C.fixosPorHora(cf)) : '—') + '</div><div class="r">de custo fixo por hora produzida</div></a></div>';
+      (function () {
+        const pm = C.periodoPreset('mes', C.dataISO()), rm = C.resumoCaixa(C.filtrarMovimentos(movsTodos(), pm));
+        return '<a class="stat" href="#/caixa" style="text-decoration:none"><div class="n ' + (rm.saldo < 0 ? 'neg-txt' : '') + '">' + (rm.saldo < 0 ? '−' : '') + C.brl(Math.abs(rm.saldo)) + '</div><div class="r">de saldo no caixa este mês</div></a>';
+      })() + '</div>';
 
     if (a.prejuizo.length) {
       h += '<section class="bloco"><h2>Vendendo abaixo do custo</h2><p class="explica">O preço praticado destas opções não cobre o custo. Cada venda tira dinheiro do caixa.</p><div class="lista">' +
@@ -530,7 +547,7 @@
       '<div class="linha-campos"><label class="campo"><span>Marca</span><input class="entrada" name="marca" value="' + esc(ing.marca) + '"></label>' +
       '<label class="campo"><span>Fornecedor</span><input class="entrada" name="fornecedor" value="' + esc(ing.fornecedor) + '"></label></div>' +
       '<label class="campo"><span>Observação</span><input class="entrada" name="obs" value="' + esc(ing.obs) + '"></label>' +
-      (hist.length > 1 ? '<div><h3>Histórico de preço</h3>' + sparkline(ing.historico) + '<ul class="historico">' + hist.map(x => '<li><span>' + dataBR(x.data) + '</span><span>' + C.num(x.qtdEmbalagem) + ' ' + rotUn(x.unidade) + ' por ' + C.brl(x.valorPago) + '</span></li>').join('') + '</ul></div>' : '') +
+      (hist.length > 1 ? '<div><h3>Histórico de preço</h3>' + sparkline(ing.historico) + '<ul class="historico">' + hist.map(x => '<li><span>' + dataBR(x.data) + (x.compra ? ' <span class="chip mudo">compra</span>' : '') + '</span><span>' + C.num(x.qtdEmbalagem) + ' ' + rotUn(x.unidade) + ' por ' + C.brl(x.valorPago) + '</span></li>').join('') + '</ul></div>' : '') +
       (usos.length ? '<p class="mudo">Usado em: ' + usos.map(r => esc(r.nome)).join(', ') + '</p>' : '') +
       '<div class="rodape-folha">' + (orig ? '<button type="button" class="btn perigo" data-excluir>' + I.lixo + 'Excluir</button>' : '') + '<span style="flex:1"></span><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">Salvar ingrediente</button></div></form>';
     abrirFolha(orig ? 'Editar ingrediente' : 'Novo ingrediente', corpo, function (d) {
@@ -714,7 +731,15 @@
     // Básico
     h += '<section class="bloco"><h2>Receita</h2><div class="grade">' +
       '<label class="campo"><span>Nome</span><input class="entrada" data-c="nome" value="' + esc(r.nome) + '" placeholder="Ex.: Brigadeiro gourmet"></label>' +
-      '<label class="campo"><span>Categoria</span><input class="entrada" data-c="categoria" list="dl-cats" value="' + esc(r.categoria) + '" placeholder="Ex.: Brigadeiros"><datalist id="dl-cats">' + cats.map(c => '<option value="' + esc(c) + '">').join('') + '</datalist></label></div>' +
+      (function () {
+        const lst = cats.slice().sort((x, y) => x.localeCompare(y, 'pt-BR'));
+        const nova = !!e.catNova || (r.categoria && lst.indexOf(r.categoria) < 0);
+        return '<div class="campo"><label for="sel-cat"><span>Categoria</span></label><select class="entrada" id="sel-cat" data-cat-sel>' +
+          '<option value=""' + (!r.categoria && !nova ? ' selected' : '') + '>Sem categoria</option>' +
+          lst.map(c => '<option' + (c === r.categoria && !nova ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
+          '<option value="__nova__"' + (nova ? ' selected' : '') + '>+ Criar nova categoria…</option></select>' +
+          '<input class="entrada" data-c="categoria" id="nova-cat" aria-label="Nome da nova categoria" placeholder="Nome da nova categoria" value="' + (nova ? esc(r.categoria) : '') + '"' + (nova ? '' : ' hidden') + ' style="margin-top:8px"></div>';
+      })() + '</div>' +
       '<div class="grade" style="margin-top:12px">' +
       '<div class="campo"><span>Rendimento</span><div class="linha-campos" style="flex-wrap:nowrap"><input class="entrada num" data-c="rendimento.qtd" data-n inputmode="decimal" value="' + inNum(r.rendimento.qtd) + '" placeholder="40" aria-label="Quantidade que a receita rende"><select class="entrada" data-c="rendimento.unidade" data-estrut style="flex:0 0 96px" aria-label="Unidade do rendimento">' + opcoesUn(null, r.rendimento.unidade) + '</select></div><small>Quanto sai de uma receita: unidades, gramas ou ml.</small></div>' +
       '<div class="campo"><span>Tempo de produção</span><div class="linha-campos" style="flex-wrap:nowrap"><span class="com-prefixo"><input class="entrada num" data-c="_th" data-n inputmode="numeric" value="' + (tH === null ? '' : tH) + '" aria-label="Horas"><i class="dir">h</i></span><span class="com-prefixo"><input class="entrada num" data-c="_tm" data-n inputmode="numeric" value="' + (tM === null ? '' : tM) + '" aria-label="Minutos"><i class="dir">min</i></span></div><small>Usado para mão de obra e custos fixos.</small></div>' +
@@ -806,6 +831,13 @@
   }
   function aoEditar(ev) {
     const el = ev.target; const d = S.editor && S.editor.d; if (!d) return;
+    if (el.hasAttribute('data-cat-sel')) {
+      if (ev.type !== 'change') return;
+      const campo = $('#nova-cat');
+      if (el.value === '__nova__') { S.editor.catNova = true; d.categoria = ''; campo.value = ''; campo.hidden = false; campo.focus(); }
+      else { S.editor.catNova = false; d.categoria = el.value; campo.hidden = true; campo.value = ''; }
+      marcarSujo(); return;
+    }
     if (el.dataset.preco) {
       if (ev.type !== 'input') return;
       const v = C.lerNum(el.value);
@@ -935,6 +967,9 @@
     const erro = validarReceita(r);
     if (erro) { toast(erro); return false; }
     r.nome = r.nome.trim();
+    // categoria escrita com outra grafia vira a que já existe ("brigadeiros" → "Brigadeiros")
+    const catExist = lista('receitas').map(x => x.categoria).filter(Boolean).find(c => C.semAcento(c) === C.semAcento(r.categoria));
+    r.categoria = catExist || String(r.categoria || '').trim();
     gravarRegistro('receitas', clone(r));
     const eraNova = e.nova;
     S.editor = { tipo: 'receita', idRota: r.id, nova: false, d: clone(r), sujo: false };
@@ -946,7 +981,7 @@
 
   // ================= Etapa 2: pedidos, clientes, agenda, produção e compras =================
   const ATIVOS = ['orcamento', 'confirmado', 'producao', 'pronto'];
-  const ABAS_PED = [['#/pedidos', 'Pedidos'], ['#/agenda', 'Agenda'], ['#/producao', 'Produção'], ['#/compras', 'Compras']];
+  const ABAS_PED = [['#/pedidos', 'Pedidos'], ['#/agenda', 'Agenda'], ['#/producao', 'Produção'], ['#/compras', 'Compras'], ['#/estoque', 'Estoque']];
   const ABAS_REC = [['#/receitas', 'Receitas'], ['#/ingredientes', 'Ingredientes']];
   const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
   function hoje() { return C.dataISO(); }
@@ -1174,6 +1209,7 @@
     // Resumo em colunas simples: aparece legível na planilha e servirá aos relatórios.
     p.total = c.total; p.pago = c.pago; p.restante = c.restante; p.lucroEstimado = c.lucro; p.situacaoPagamento = c.situacao;
     const orig = S.dados.pedidos[p.id];
+    aplicarBaixaEstoquePedido(orig, p);
     if (!orig || orig.status !== p.status) (p.historicoStatus = p.historicoStatus || []).push({ status: p.status, em: agoraISO() });
     gravarRegistro('pedidos', clone(p));
     const eraNovo = e.nova;
@@ -1385,40 +1421,53 @@
     return h;
   }
 
-  // ---------- Produção ----------
-  function textoProducao(dia, linhas) {
-    return 'Produção de ' + dataDia(dia) + '\n\n' + linhas.map(l => (l.feito ? '[x] ' : '[ ] ') + l.nome + ': ' + l.qtd + (l.lotes ? ' (' + l.lotes + ')' : '')).join('\n');
+  // ---------- Produção (um ou vários dias) ----------
+  const PRESETS_PROD = [['hoje', 'Hoje', 0, 0], ['amanha', 'Amanhã', 1, 1], ['3dias', 'Próximos 3 dias', 0, 2], ['7dias', 'Próximos 7 dias', 0, 6]];
+  function faixaProd() { if (!S.prod) S.prod = { preset: 'hoje', de: hoje(), ate: hoje() }; return S.prod; }
+  function rotuloFaixa(de, ate) { return de === ate ? dataCurta(de) : dataCurta(de) + ' até ' + dataCurta(ate); }
+  function textoProducao(de, ate, linhas) {
+    return 'Produção ' + (de === ate ? 'de ' + dataDia(de) : 'de ' + dataDia(de) + ' a ' + dataDia(ate)) + '\n\n' +
+      linhas.map(l => (l.feito ? '[x] ' : '[ ] ') + l.nome + ': ' + l.qtd + (l.lotes ? ' (' + l.lotes + ')' : '') + (l.porDia ? '\n    ' + l.porDia.join('; ') : '')).join('\n');
   }
   function telaProducao() {
-    const dia = S.prodDia || (S.prodDia = hoje());
-    const doDia = lista('pedidos').filter(p => p.dataEntrega === dia && p.status !== 'cancelado');
-    const peds = doDia.filter(p => ['confirmado', 'producao'].includes(p.status)).sort(ordemData);
-    const orc = doDia.filter(p => p.status === 'orcamento').length;
-    const prontos = doDia.filter(p => ['pronto', 'entregue'].includes(p.status)).length;
+    const P = faixaProd(), umDia = P.de === P.ate;
+    let h = cab('Produção', 'O que fazer para os pedidos do período, já somando receitas usadas dentro de outras.') + abas(ABAS_PED, '#/producao');
+    h += '<section class="bloco"><div class="seg" role="group" aria-label="Período da produção">' + PRESETS_PROD.map(p => '<button type="button" data-acao="prod-preset" data-v="' + p[0] + '" aria-pressed="' + (P.preset === p[0]) + '">' + p[1] + '</button>').join('') + '</div>' +
+      '<div class="linha-campos" style="margin-top:12px"><label class="campo"><span>De</span><input class="entrada" type="date" data-prodfaixa="de" value="' + P.de + '"></label><label class="campo"><span>Até</span><input class="entrada" type="date" data-prodfaixa="ate" value="' + P.ate + '"></label></div></section>';
+    if (P.ate < P.de) return h + '<div class="aviso neg">' + I.alerta + '<div class="txt">A data final vem antes da inicial.</div></div>';
+    const naFaixa = lista('pedidos').filter(p => p.dataEntrega && p.dataEntrega >= P.de && p.dataEntrega <= P.ate && p.status !== 'cancelado');
+    const peds = naFaixa.filter(p => ['confirmado', 'producao'].includes(p.status)).sort(ordemData);
+    const orc = naFaixa.filter(p => p.status === 'orcamento').length;
+    const prontos = naFaixa.filter(p => ['pronto', 'entregue'].includes(p.status)).length;
     const feito = S.meta.producaoFeita || {};
-    let h = cab('Produção', 'O que fazer para os pedidos do dia, já somando receitas usadas dentro de outras.') + abas(ABAS_PED, '#/producao');
-    h += '<div class="linha-campos" style="margin-bottom:16px;align-items:flex-end"><label class="campo" style="flex:0 1 200px"><span>Dia</span><input class="entrada" type="date" id="prod-dia" value="' + dia + '"></label>' +
-      '<div class="acoes"><button type="button" class="btn sec fino" data-acao="prod-dia" data-v="0" aria-pressed="' + (dia === hoje()) + '">Hoje</button><button type="button" class="btn sec fino" data-acao="prod-dia" data-v="1" aria-pressed="' + (dia === C.somarDias(hoje(), 1)) + '">Amanhã</button></div></div>';
+    const chaveFeito = umDia ? P.de : P.de + '..' + P.ate;
     if (!peds.length) {
-      return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nada para produzir ' + esc(dataCurta(dia)) + '</h2><p>' +
-        (prontos ? prontos + (prontos === 1 ? ' pedido deste dia já está pronto ou entregue. ' : ' pedidos deste dia já estão prontos ou entregues. ') : '') +
+      return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nada para produzir</h2><p class="faixa-prod">' + esc((t => t.charAt(0).toUpperCase() + t.slice(1))(rotuloFaixa(P.de, P.ate))) + '</p><p>' +
+        (prontos ? prontos + (prontos === 1 ? ' pedido do período já está pronto ou entregue. ' : ' pedidos do período já estão prontos ou entregues. ') : '') +
         (orc ? orc + (orc === 1 ? ' orçamento ainda não foi confirmado.' : ' orçamentos ainda não foram confirmados.') : 'A lista usa pedidos confirmados ou em produção.') + '</p><a class="btn sec" href="#/agenda">Ver agenda</a></div>';
     }
-    const nx = C.necessidades(peds, ctxCalc());
+    const ctx = ctxCalc();
+    const nx = C.necessidades(peds, ctx);
+    const pd = umDia ? null : C.producaoPorDia(peds, ctx);
     const linhas = Object.values(nx.producao).map(function (x) {
       const r = S.dados.receitas[x.receitaId] || {};
       const lotes = x.rendBase ? x.qtdBase / x.rendBase : null;
-      return { id: x.receitaId, nome: r.nome || 'Receita', direto: x.direto > 0, qtd: C.qtdLegivel(x.qtdBase, x.unidadeBase || 'un'),
-        lotes: C.numOk(lotes) ? C.num(lotes, 2) + (lotes === 1 ? ' receita' : ' receitas') : '', feito: !!feito[dia + ':' + x.receitaId] };
+      const ub = x.unidadeBase || 'un';
+      return { id: x.receitaId, nome: r.nome || 'Receita', direto: x.direto > 0, qtd: C.qtdLegivel(x.qtdBase, ub),
+        lotes: C.numOk(lotes) ? C.num(lotes, 2) + (lotes === 1 ? ' receita' : ' receitas') : '', feito: !!feito[chaveFeito + ':' + x.receitaId],
+        porDia: pd && pd[x.receitaId] ? pd[x.receitaId].map(d => dataCurta(d.dia) + ': ' + C.qtdLegivel(d.qtdBase, ub)) : null };
     }).sort((a, b) => (a.direto === b.direto ? a.nome.localeCompare(b.nome, 'pt-BR') : a.direto ? 1 : -1));
-    S.textoCopia = textoProducao(dia, linhas);
+    S.textoCopia = textoProducao(P.de, P.ate, linhas);
     const nConf = peds.filter(p => p.status === 'confirmado').length;
-    h += '<section class="bloco"><h2>Fazer</h2><p class="explica">As receitas de base (recheios, massas) aparecem primeiro, porque entram nas outras.</p><div class="lista-check">' +
-      linhas.map(l => '<label class="linha-check' + (l.feito ? ' feito' : '') + '"><input type="checkbox" data-prod="' + esc(dia + ':' + l.id) + '"' + (l.feito ? ' checked' : '') + '><span class="principal"><b>' + esc(l.nome) + '</b><small>' + (l.direto ? '' : 'base para outras receitas') + '</small></span><span class="valor">' + esc(l.qtd) + '<small>' + esc(l.lotes) + '</small></span></label>').join('') + '</div>' +
+    const faixaTxt = rotuloFaixa(P.de, P.ate);
+    h += '<section class="bloco"><h2>O que fazer</h2><p class="faixa-prod">' + esc(faixaTxt.charAt(0).toUpperCase() + faixaTxt.slice(1)) + '</p><p class="explica">As receitas de base (recheios, massas) aparecem primeiro, porque entram nas outras.' + (umDia ? '' : ' Embaixo de cada uma, quanto é para cada dia.') + '</p><div class="lista-check">' +
+      linhas.map(l => '<label class="linha-check' + (l.feito ? ' feito' : '') + '"><input type="checkbox" data-prod="' + esc(chaveFeito + ':' + l.id) + '"' + (l.feito ? ' checked' : '') + '><span class="principal"><b>' + esc(l.nome) + '</b><small>' + (l.direto ? '' : 'base para outras receitas') + '</small>' +
+        (l.porDia ? '<small class="por-dia">' + l.porDia.map(esc).join('<br>') + '</small>' : '') + '</span><span class="valor">' + esc(l.qtd) + '<small>' + esc(l.lotes) + '</small></span></label>').join('') + '</div>' +
       (nx.avisos.length ? '<div class="aviso" style="margin-top:12px">' + I.alerta + '<div class="txt"><ul>' + nx.avisos.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul></div></div>' : '') +
-      '<div class="acoes" style="margin-top:14px">' + (nConf ? '<button type="button" class="btn" data-acao="prod-iniciar">Marcar ' + (nConf === 1 ? 'o pedido' : 'os ' + nConf + ' pedidos') + ' como em produção</button>' : '') +
-      '<button type="button" class="btn sec" data-acao="copiar-lista">' + I.copiar + 'Copiar lista</button><a class="btn sec" href="#/compras?de=' + dia + '&ate=' + dia + '">Ver ingredientes do dia</a></div></section>';
-    h += '<section class="bloco"><h2>Pedidos do dia</h2>' + (orc ? '<p class="explica">' + orc + (orc === 1 ? ' orçamento deste dia não entra na conta' : ' orçamentos deste dia não entram na conta') + ' até ser confirmado.</p>' : '') + '<div class="lista">' + peds.map(cardPedido).join('') + '</div></section>';
+      '<div class="acoes" style="margin-top:14px">' + (nConf ? '<button type="button" class="btn" data-acao="prod-iniciar">' + (nConf === 1 ? 'Colocar o pedido confirmado em produção' : 'Colocar os ' + nConf + ' pedidos confirmados em produção') + '</button>' : '') +
+      '<button type="button" class="btn sec" data-acao="copiar-lista">' + I.copiar + 'Copiar lista</button><a class="btn sec" href="#/compras?de=' + P.de + '&ate=' + P.ate + '">Ver ingredientes</a></div>' +
+      (nConf && modoEstoque() === 'completo' ? '<p class="mudo" style="margin-top:8px">Ao entrar em produção, os ingredientes saem do estoque.</p>' : '') + '</section>';
+    h += '<section class="bloco"><h2>Pedidos do período</h2>' + (orc ? '<p class="explica">' + orc + (orc === 1 ? ' orçamento do período não entra na conta' : ' orçamentos do período não entram na conta') + ' até ser confirmado.</p>' : '') + '<div class="lista">' + (umDia ? peds.map(cardPedido).join('') : listaAgrupada(peds)) + '</div></section>';
     return h;
   }
 
@@ -1428,24 +1477,31 @@
     const sts = F.orc ? ['orcamento', 'confirmado', 'producao'] : ['confirmado', 'producao'];
     const peds = lista('pedidos').filter(p => sts.includes(p.status) && p.dataEntrega && p.dataEntrega >= F.de && p.dataEntrega <= F.ate);
     const nx = C.necessidades(peds, ctxCalc());
+    const comEstoque = modoEstoque() !== 'desligado';
     let h = cab('Lista de compras', 'Ingredientes para os pedidos do período, com receitas dentro de receitas já desmontadas e a perda de cada uma.') + abas(ABAS_PED, '#/compras');
     h += '<section class="bloco"><div class="linha-campos"><label class="campo"><span>De</span><input class="entrada" type="date" data-compras="de" value="' + F.de + '"></label><label class="campo"><span>Até</span><input class="entrada" type="date" data-compras="ate" value="' + F.ate + '"></label></div>' +
       '<div class="acoes" style="margin-top:10px"><button type="button" class="btn sec fino" data-acao="compras-periodo" data-v="7">Próximos 7 dias</button><button type="button" class="btn sec fino" data-acao="compras-periodo" data-v="1">Só amanhã</button></div>' +
       '<label class="chave" style="margin-top:6px"><span class="rot">Incluir orçamentos<small>Para já ter noção, antes de o cliente confirmar</small></span><input type="checkbox" data-compras="orc"' + (F.orc ? ' checked' : '') + '></label></section>';
     if (F.ate < F.de) return h + '<div class="aviso neg">' + I.alerta + '<div class="txt">A data final vem antes da inicial.</div></div>';
-    const linhas = Object.values(nx.compras).map(c => ({ c: c, ing: S.dados.ingredientes[c.ingredienteId] })).filter(x => x.ing)
-      .sort((a, b) => a.ing.nome.localeCompare(b.ing.nome, 'pt-BR'));
+    const base = comEstoque ? C.comprasComEstoque(nx.compras, saldos(), S.dados.ingredientes) : Object.values(nx.compras).map(c => Object.assign({}, c, { tem: 0, falta: c.qtdBase, embalagensFalta: c.embalagens, custoFalta: c.custoEmbalagens }));
+    const linhas = base.map(c => ({ c: c, ing: S.dados.ingredientes[c.ingredienteId] })).filter(x => x.ing)
+      .sort((a, b) => ((b.c.embalagensFalta > 0) - (a.c.embalagensFalta > 0)) || a.ing.nome.localeCompare(b.ing.nome, 'pt-BR'));
     if (!peds.length || !linhas.length) {
       return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nada a comprar no período</h2><p>' + (peds.length ? 'Os pedidos do período não têm receitas com ingredientes calculáveis.' : 'Não há pedidos ' + (F.orc ? '' : 'confirmados ') + 'entre ' + dataDia(F.de) + ' e ' + dataDia(F.ate) + '.') + '</p></div>' +
         (nx.avisos.length ? '<div class="aviso">' + I.alerta + '<div class="txt"><ul>' + nx.avisos.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul></div></div>' : '');
     }
-    const total = linhas.reduce((s, x) => s + (x.c.custoEmbalagens || 0), 0);
-    S.textoCopia = 'Lista de compras (' + dataDia(F.de) + (F.ate !== F.de ? ' a ' + dataDia(F.ate) : '') + ')\n\n' + linhas.map(x => '- ' + x.ing.nome + ': ' + (x.c.embalagens ? x.c.embalagens + ' × ' + C.num(x.ing.qtdEmbalagem) + ' ' + rotUn(x.ing.unidade) + ' (usa ' + C.qtdLegivel(x.c.qtdBase, x.c.base) + ')' : C.qtdLegivel(x.c.qtdBase, x.c.base))).join('\n') + '\n\nEstimativa: ' + C.brl(total);
-    h += '<section class="bloco"><h2>' + linhas.length + (linhas.length === 1 ? ' ingrediente' : ' ingredientes') + ' para ' + peds.length + (peds.length === 1 ? ' pedido' : ' pedidos') + '</h2>' +
-      '<p class="explica">"Usa" é o que as receitas consomem. "Comprar" arredonda para embalagens inteiras. Ainda não desconta o que você tem em casa; isso chega com o estoque, na próxima etapa.</p>' +
-      '<div class="tabela-compras" role="table"><div class="tc-cab" role="row"><span role="columnheader">Ingrediente</span><span role="columnheader">Usa</span><span role="columnheader">Comprar</span><span role="columnheader">Custo</span></div>' +
-      linhas.map(x => '<div class="tc-lin" role="row"><span role="cell"><b>' + esc(x.ing.nome) + '</b></span><span role="cell" data-r="Usa">' + C.qtdLegivel(x.c.qtdBase, x.c.base) + '</span><span role="cell" data-r="Comprar">' + (x.c.embalagens ? x.c.embalagens + ' × ' + C.num(x.ing.qtdEmbalagem) + ' ' + rotUn(x.ing.unidade) : '—') + '</span><span role="cell" data-r="Custo">' + C.brl(x.c.custoEmbalagens) + '</span></div>').join('') +
-      '<div class="tc-lin tc-total" role="row"><span role="cell"><b>Total estimado</b></span><span role="cell"></span><span role="cell"></span><span role="cell"><b>' + C.brl(total) + '</b></span></div></div>' +
+    const comprar = linhas.filter(x => x.c.embalagensFalta > 0);
+    const total = comprar.reduce((s, x) => s + (x.c.custoFalta || 0), 0);
+    const embTxt = x => x.c.embalagensFalta + ' × ' + C.num(x.ing.qtdEmbalagem) + ' ' + rotUn(x.ing.unidade);
+    S.textoCopia = 'Lista de compras (' + dataDia(F.de) + (F.ate !== F.de ? ' a ' + dataDia(F.ate) : '') + ')\n\n' +
+      (comprar.length ? comprar.map(x => '- ' + x.ing.nome + ': ' + embTxt(x)).join('\n') : 'Nada a comprar: o estoque cobre tudo.') + '\n\nEstimativa: ' + C.brl(total);
+    h += '<section class="bloco"><h2>' + (comprar.length ? comprar.length + (comprar.length === 1 ? ' ingrediente a comprar' : ' ingredientes a comprar') : 'O estoque cobre tudo') + ' para ' + peds.length + (peds.length === 1 ? ' pedido' : ' pedidos') + '</h2>' +
+      '<p class="explica">"Usa" é o que as receitas consomem.' + (comEstoque ? ' "Tem" vem do Estoque; "Comprar" é só o que falta, arredondado para embalagens inteiras.' : ' "Comprar" arredonda para embalagens inteiras. Ligue o Estoque em Ajustes para descontar o que você já tem.') + '</p>' +
+      '<div class="tabela-compras' + (comEstoque ? ' com-estoque' : '') + '" role="table"><div class="tc-cab" role="row"><span role="columnheader">Ingrediente</span><span role="columnheader">Usa</span>' + (comEstoque ? '<span role="columnheader">Tem</span>' : '') + '<span role="columnheader">Comprar</span><span role="columnheader">Custo</span></div>' +
+      linhas.map(x => '<div class="tc-lin' + (x.c.embalagensFalta > 0 ? '' : ' tc-ok') + '" role="row"><span role="cell"><b>' + esc(x.ing.nome) + '</b></span><span role="cell" data-r="Usa">' + C.qtdLegivel(x.c.qtdBase, x.c.base) + '</span>' +
+        (comEstoque ? '<span role="cell" data-r="Tem">' + C.qtdLegivel(x.c.tem, x.c.base) + '</span>' : '') +
+        '<span role="cell" data-r="Comprar">' + (x.c.embalagensFalta > 0 ? embTxt(x) : (comEstoque ? 'já tem' : '—')) + '</span><span role="cell" data-r="Custo">' + (x.c.embalagensFalta > 0 ? C.brl(x.c.custoFalta) : '—') + '</span></div>').join('') +
+      '<div class="tc-lin tc-total" role="row"><span role="cell"><b>Total estimado</b></span><span role="cell"></span>' + (comEstoque ? '<span role="cell"></span>' : '') + '<span role="cell"></span><span role="cell"><b>' + C.brl(total) + '</b></span></div></div>' +
       (nx.avisos.length ? '<div class="aviso" style="margin-top:12px">' + I.alerta + '<div class="txt"><ul>' + nx.avisos.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul></div></div>' : '') +
       '<div class="acoes" style="margin-top:14px"><button type="button" class="btn sec" data-acao="copiar-lista">' + I.copiar + 'Copiar lista</button><a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(S.textoCopia) + '">' + I.mensagem + 'Enviar no WhatsApp</a></div></section>';
     return h;
@@ -1540,12 +1596,13 @@
       render(false);
     },
     'agenda-hoje': function () { S.agenda = { mes: hoje().slice(0, 7), dia: hoje() }; render(false); },
-    'prod-dia': function (el) { S.prodDia = C.somarDias(hoje(), Number(el.dataset.v)); if (location.hash !== '#/producao') ir('#/producao'); else render(false); },
+    'prod-dia': function (el) { const n = Number(el.dataset.v), d = C.somarDias(hoje(), n); S.prod = { preset: n === 1 ? 'amanha' : n === 0 ? 'hoje' : 'personalizado', de: d, ate: d }; if (location.hash !== '#/producao') ir('#/producao'); else render(false); },
+    'prod-preset': function (el) { const p = PRESETS_PROD.find(x => x[0] === el.dataset.v); S.prod = { preset: p[0], de: C.somarDias(hoje(), p[2]), ate: C.somarDias(hoje(), p[3]) }; render(false); },
     'prod-iniciar': function () {
-      const dia = S.prodDia;
-      const ps = lista('pedidos').filter(p => p.dataEntrega === dia && p.status === 'confirmado');
-      ps.forEach(function (p) { const c = clone(p); c.status = 'producao'; (c.historicoStatus = c.historicoStatus || []).push({ status: 'producao', em: agoraISO() }); gravarRegistro('pedidos', c); });
-      toast(ps.length === 1 ? '1 pedido em produção.' : ps.length + ' pedidos em produção.'); render(false);
+      const P = faixaProd();
+      const ps = lista('pedidos').filter(p => p.dataEntrega >= P.de && p.dataEntrega <= P.ate && p.status === 'confirmado');
+      ps.forEach(function (p) { const c = clone(p); c.status = 'producao'; (c.historicoStatus = c.historicoStatus || []).push({ status: 'producao', em: agoraISO() }); aplicarBaixaEstoquePedido(p, c); gravarRegistro('pedidos', c); });
+      toast((ps.length === 1 ? '1 pedido em produção.' : ps.length + ' pedidos em produção.') + (modoEstoque() === 'completo' ? ' Ingredientes descontados do estoque.' : '')); render(false);
     },
     'copiar-lista': function () { if (S.textoCopia) copiarTexto(S.textoCopia); },
     'compras-periodo': function (el) {
@@ -1566,13 +1623,611 @@
       t.closest('.linha-check').classList.toggle('feito', t.checked);
       return;
     }
-    if (t.id === 'prod-dia' && t.value) { S.prodDia = t.value; render(false); return; }
+    if (t.dataset && t.dataset.prodfaixa && t.value) { const P = faixaProd(); P[t.dataset.prodfaixa] = t.value; P.preset = 'personalizado'; render(false); return; }
     if (t.dataset && t.dataset.compras) {
       S.compras = S.compras || {};
       if (t.dataset.compras === 'orc') S.compras.orc = t.checked; else if (t.value) S.compras[t.dataset.compras] = t.value;
       render(false);
     }
   });
+
+  // ================= Caixa: entradas e saídas =================
+  const PRESETS_CX = [['hoje', 'Hoje'], ['7dias', '7 dias'], ['mes', 'Este mês'], ['mesPassado', 'Mês passado'], ['ano', 'Este ano']];
+  function filtroCaixa() {
+    if (!S.caixa) { const p = C.periodoPreset('mes', hoje()); S.caixa = { preset: 'mes', de: p.de, ate: p.ate, tipo: 'todos', fontes: [], busca: '' }; }
+    return S.caixa;
+  }
+  function movsTodos() { return C.movimentos(lista('pedidos'), lista('lancamentos'), nomeCliente); }
+  function fontesConhecidas(tipo) {
+    const base = tipo === 'saida' ? C.CATEGORIAS_PADRAO : C.ORIGENS_PADRAO;
+    const usadas = lista('lancamentos').filter(l => (l.tipo === 'saida') === (tipo === 'saida')).map(l => l.categoria).filter(Boolean);
+    const vistos = {}, out = [];
+    base.concat(usadas).forEach(f => { const k = C.semAcento(f); if (!vistos[k] && k !== C.semAcento(C.FONTE_PEDIDOS)) { vistos[k] = 1; out.push(f); } });
+    return out;
+  }
+  function fonteCanonica(nome, tipo) {
+    const k = C.semAcento(nome);
+    return fontesConhecidas(tipo).find(f => C.semAcento(f) === k) || String(nome || '').trim();
+  }
+  function formaTxt(f) { return C.FORMAS_LANCAMENTO[f] || ''; }
+
+  function telaCaixa() {
+    const F = filtroCaixa();
+    const todos = movsTodos();
+    let h = cab('Caixa', 'Tudo o que entrou e saiu. Os pagamentos registrados nos pedidos entram sozinhos.',
+      '<a class="btn sec" href="#/lancamento/novo?tipo=entrada">' + I.mais + 'Nova entrada</a><a class="btn" href="#/lancamento/novo?tipo=saida">' + I.mais + 'Nova saída</a>');
+    if (!todos.length) {
+      return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhum movimento ainda</h2><p>Registre as saídas (compras, contas) e as entradas de fora dos pedidos, como vendas de balcão. Os sinais e pagamentos dos pedidos aparecem aqui sozinhos.</p><div class="acoes" style="justify-content:center"><a class="btn" href="#/lancamento/novo?tipo=saida">' + I.mais + 'Registrar uma saída</a><a class="btn sec" href="#/lancamento/novo?tipo=entrada">' + I.mais + 'Registrar uma entrada</a></div></div>';
+    }
+    const noPeriodo = C.filtrarMovimentos(todos, { de: F.de, ate: F.ate });
+    const semFonte = C.filtrarMovimentos(noPeriodo, { tipo: F.tipo, busca: F.busca });
+    const lst = C.filtrarMovimentos(semFonte, { fontes: F.fontes });
+    const r = C.resumoCaixa(lst), rf = C.resumoCaixa(semFonte);
+    S.movsFiltrados = lst;
+    const sel = f => F.fontes.some(x => C.semAcento(x) === C.semAcento(f));
+    const chip = f => '<button type="button" class="chip-filtro" data-acao="cx-fonte" data-v="' + esc(f) + '" aria-pressed="' + sel(f) + '">' + (sel(f) ? I.ok : '') + esc(f) + '</button>';
+    const fontesDe = tipo => { const nomes = Object.keys(rf.porFonte[tipo]); F.fontes.forEach(f => { if (!nomes.some(n => C.semAcento(n) === C.semAcento(f)) && (tipo === 'saida' ? fontesConhecidas('saida') : fontesConhecidas('entrada').concat([C.FONTE_PEDIDOS])).some(n => C.semAcento(n) === C.semAcento(f))) nomes.push(f); }); return nomes.sort((a, b) => a.localeCompare(b, 'pt-BR')); };
+    const fe = F.tipo !== 'saida' ? fontesDe('entrada') : [], fs = F.tipo !== 'entrada' ? fontesDe('saida') : [];
+    const filtrosAtivos = F.tipo !== 'todos' || F.fontes.length || F.busca;
+
+    const nAtivos = (F.tipo !== 'todos' ? 1 : 0) + F.fontes.length + (F.busca ? 1 : 0);
+    h += '<section class="bloco filtros-cx"><h2 class="sr">Período</h2><div class="seg" role="group" aria-label="Período">' +
+      PRESETS_CX.map(p => '<button type="button" data-acao="cx-preset" data-v="' + p[0] + '" aria-pressed="' + (F.preset === p[0]) + '">' + p[1] + '</button>').join('') + '</div>' +
+      '<div class="linha-campos" style="margin-top:12px"><label class="campo"><span>De</span><input class="entrada" type="date" data-cx="de" value="' + F.de + '"></label><label class="campo"><span>Até</span><input class="entrada" type="date" data-cx="ate" value="' + F.ate + '"></label></div></section>';
+    if (F.ate < F.de) return h + '<div class="aviso neg">' + I.alerta + '<div class="txt">A data final vem antes da inicial.</div></div>';
+
+    h += '<div class="stats stats-cx"><div class="stat"><div class="r">Entradas</div><div class="n pos-txt">' + C.brl(r.entradas) + '</div></div>' +
+      '<div class="stat"><div class="r">Saídas</div><div class="n neg-txt">' + C.brl(r.saidas) + '</div></div>' +
+      '<div class="stat"><div class="r">Saldo ' + (r.saldo < 0 ? '(negativo)' : '') + '</div><div class="n ' + (r.saldo < 0 ? 'neg-txt' : 'pos-txt') + '">' + (r.saldo < 0 ? '−' : '') + C.brl(Math.abs(r.saldo)) + '</div></div></div>';
+
+    h += '<details class="bloco mais-filtros"' + (nAtivos || F.maisAberto ? ' open' : '') + '><summary><span>Filtrar por tipo, origem ou categoria</span>' + (nAtivos ? '<span class="chip alerta">' + nAtivos + (nAtivos === 1 ? ' filtro ativo' : ' filtros ativos') + '</span>' : '') + '</summary>' +
+      '<div class="seg" role="group" aria-label="Tipo de movimento" style="margin-top:6px">' + [['todos', 'Tudo'], ['entrada', 'Entradas'], ['saida', 'Saídas']].map(t => '<button type="button" data-acao="cx-tipo" data-v="' + t[0] + '" aria-pressed="' + (F.tipo === t[0]) + '">' + t[1] + '</button>').join('') + '</div>' +
+      (fe.length ? '<div class="grupo-fontes"><span class="rot-fontes">Origem das entradas</span><div class="chips-filtro">' + fe.map(chip).join('') + '</div></div>' : '') +
+      (fs.length ? '<div class="grupo-fontes"><span class="rot-fontes">Categoria das saídas</span><div class="chips-filtro">' + fs.map(chip).join('') + '</div></div>' : '') +
+      '<div class="linha-campos" style="margin-top:14px"><label class="busca"><span class="sr">Buscar na descrição</span>' + I.busca + '<input class="entrada" id="busca-cx" type="search" placeholder="Buscar na descrição" value="' + esc(F.busca) + '"></label></div>' +
+      (filtrosAtivos ? '<button type="button" class="link-btn" data-acao="cx-limpar">Limpar filtros (mantém o período)</button>' : '') + '</details>';
+    if (!lst.length) return h + '<p class="mudo" style="padding:8px 4px 24px">Nenhum movimento com esses filtros.</p>';
+
+    h += graficoCaixa(lst, F.de, F.ate);
+    h += '<div class="grade-fontes">' + blocoPorFonte('Entradas por origem', rf.porFonte.entrada, 'entrada', sel) + blocoPorFonte('Saídas por categoria', rf.porFonte.saida, 'saida', sel) + '</div>';
+
+    const LIM = 300;
+    let lista_ = '', ultimo = null;
+    lst.slice(0, LIM).forEach(function (m) {
+      if (m.data !== ultimo) { ultimo = m.data; lista_ += '<h3 class="grupo-data">' + esc(dataCurta(m.data)) + '</h3>'; }
+      const ent = m.tipo === 'entrada';
+      const href = m.automatico ? '#/pedido/' + encodeURIComponent(m.pedidoId) : '#/lancamento/' + encodeURIComponent(m.lancamentoId);
+      lista_ += '<a class="item mov" href="' + href + '"><div class="principal"><div class="nome">' + esc(m.descricao) + '</div><div class="det">' + esc(m.fonte) +
+        (m.forma ? ', ' + esc(formaTxt(m.forma)) : '') + (m.nItensCompra ? ', ' + m.nItensCompra + (m.nItensCompra === 1 ? ' ingrediente' : ' ingredientes') : '') + (m.pedidoCancelado ? ', pedido cancelado' : '') + '</div></div>' +
+        '<div class="valor ' + (ent ? 'pos-txt' : 'neg-txt') + '"><span class="sr">' + (ent ? 'Entrada de' : 'Saída de') + '</span>' + (ent ? '+ ' : '− ') + C.brl(m.valor) + '</div></a>';
+    });
+    h += '<section class="bloco"><div class="cab-bloco"><h2>' + lst.length + (lst.length === 1 ? ' movimento' : ' movimentos') + '</h2><button type="button" class="btn sec fino" data-acao="cx-csv">' + I.baixar + 'Exportar planilha (CSV)</button></div>' +
+      '<div class="lista">' + lista_ + '</div>' + (lst.length > LIM ? '<p class="mudo" style="margin-top:10px">Mostrando os ' + LIM + ' mais recentes. Use os filtros ou exporte para ver todos.</p>' : '') + '</section>';
+    return h;
+  }
+  function graficoCaixa(lst, de, ate) {
+    const g = C.agruparPeriodo(lst, de, ate);
+    const B = g.baldes; if (!B.length) return '';
+    S.grafBaldes = B;
+    const max = Math.max(0.01, ...B.map(b => Math.max(b.entradas, b.saidas)));
+    const passo = Math.ceil(B.length / 7);
+    const nomeBalde = { dia: 'dia', semana: 'semana', mes: 'mês' }[g.modo];
+    const cols = B.map(function (b, i) {
+      const he = b.entradas / max * 100, hs = b.saidas / max * 100;
+      return '<button type="button" class="graf-col" data-acao="cx-barra" data-i="' + i + '" title="' + esc(b.rotulo + ': entradas ' + C.brl(b.entradas) + ', saídas ' + C.brl(b.saidas)) + '" aria-label="' + esc(b.rotulo + ': entradas ' + C.brl(b.entradas) + ', saídas ' + C.brl(b.saidas)) + '">' +
+        '<span class="graf-barras"><i class="b-ent" style="height:' + he.toFixed(2) + '%"></i><i class="b-sai" style="height:' + hs.toFixed(2) + '%"></i></span>' +
+        '<span class="graf-rot">' + (i % passo === 0 ? esc(g.modo === 'semana' ? b.rotulo : b.rotulo) : '') + '</span></button>';
+    }).join('');
+    return '<section class="bloco"><div class="cab-bloco"><h2>Movimento por ' + nomeBalde + '</h2><div class="legenda"><span><i class="b-ent"></i>Entradas</span><span><i class="b-sai"></i>Saídas</span></div></div>' +
+      '<div class="graf">' + cols + '</div><p class="mudo" id="graf-info" role="status">Toque numa barra para ver os valores ' + (g.modo === 'dia' ? 'do dia' : g.modo === 'semana' ? 'da semana (começa no domingo)' : 'do mês') + '.</p></section>';
+  }
+  function blocoPorFonte(titulo, mapa, tipo, sel) {
+    const itens = Object.entries(mapa).sort((a, b) => b[1] - a[1]);
+    if (!itens.length) return '';
+    const total = itens.reduce((s, x) => s + x[1], 0), max = itens[0][1] || 1;
+    return '<section class="bloco"><h2>' + titulo + '</h2><div class="por-fonte">' + itens.map(([f, v]) => '<button type="button" class="linha-fonte" data-acao="cx-fonte" data-v="' + esc(f) + '" aria-pressed="' + sel(f) + '"><span class="nome-f">' + (sel(f) ? I.ok : '') + esc(f) + '</span><span class="val-f">' + C.brl(v) + ' <small>' + C.pct(total ? v / total : 0, 0) + '</small></span><span class="barra-f"><i class="' + (tipo === 'entrada' ? 'b-ent' : 'b-sai') + '" style="width:' + (v / max * 100).toFixed(2) + '%"></i></span></button>').join('') +
+      '</div><p class="mudo" style="margin-top:8px">Toque numa linha para filtrar por ela.</p></section>';
+  }
+
+  // ---------- Editor de lançamento ----------
+  function novoLancamento(q) {
+    return { id: uid(), tipo: q && q.get('tipo') === 'saida' ? 'saida' : 'entrada', data: hoje(), valor: null, descricao: '', categoria: '', forma: 'pix', obs: '', itensCompra: [], outros: null };
+  }
+  function telaEditorLancamento(id, q) {
+    if (!S.editor || S.editor.tipo !== 'lancamento' || S.editor.idRota !== id) {
+      let d;
+      if (id === 'novo') d = novoLancamento(q);
+      else if (S.dados.lancamentos[id] && !S.dados.lancamentos[id].excluidoEm) d = clone(S.dados.lancamentos[id]);
+      else return '<div class="bloco vazio">' + I.emblema + '<h2>Lançamento não encontrado</h2><p>Ele pode ter sido excluído em outro aparelho.</p><a class="btn" href="#/caixa">Ver caixa</a></div>';
+      d.itensCompra = d.itensCompra || [];
+      S.editor = { tipo: 'lancamento', idRota: id, nova: id === 'novo', d: d, sujo: false };
+    }
+    return htmlEditorLancamento();
+  }
+  function totalLancamento(l) {
+    if (l.tipo === 'saida' && l.itensCompra.length) return C.round2(l.itensCompra.reduce((s, it) => s + (C.numOk(it.valor) ? it.valor : 0), 0) + (C.numOk(l.outros) ? l.outros : 0));
+    return C.numOk(l.valor) ? l.valor : null;
+  }
+  function htmlEditorLancamento() {
+    const e = S.editor, l = e.d, ent = l.tipo === 'entrada';
+    const ings = lista('ingredientes').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    let h = '<div class="cab-pagina"><div class="titulos"><a href="#/caixa" class="link-btn voltar">' + I.voltar + 'Caixa</a><h1>' + (e.nova ? (ent ? 'Nova entrada' : 'Nova saída') : (ent ? 'Entrada' : 'Saída')) + '</h1></div></div>';
+    h += '<div class="form-lanc">';
+    h += '<section class="bloco">' + (e.nova && !l.itensCompra.length ? '<div class="seg" role="group" aria-label="Tipo"><button type="button" data-acao="lanc-tipo" data-v="entrada" aria-pressed="' + ent + '">Entrada</button><button type="button" data-acao="lanc-tipo" data-v="saida" aria-pressed="' + !ent + '">Saída</button></div>' : '') +
+      '<div class="grade" style="margin-top:14px"><label class="campo"><span>Data</span><input class="entrada" type="date" data-c="data" value="' + esc(l.data) + '"></label>' +
+      '<label class="campo"><span>' + (ent ? 'Origem' : 'Categoria') + '</span><input class="entrada" data-c="categoria" list="dl-fontes" value="' + esc(l.categoria) + '" placeholder="' + (ent ? 'Ex.: Venda de balcão' : 'Ex.: Embalagens') + '" autocomplete="off"><datalist id="dl-fontes">' + fontesConhecidas(l.tipo).map(f => '<option value="' + esc(f) + '">').join('') + '</datalist><small>Escolha da lista ou escreva uma nova.</small></label>' +
+      '<label class="campo"><span>Descrição</span><input class="entrada" data-c="descricao" value="' + esc(l.descricao) + '" placeholder="' + (ent ? 'Ex.: 20 brigadeiros no balcão' : 'Ex.: Compra no atacado') + '"></label>' +
+      '<label class="campo"><span>Forma de pagamento</span><select class="entrada" data-c="forma">' + Object.keys(C.FORMAS_LANCAMENTO).map(k => '<option value="' + k + '"' + (l.forma === k ? ' selected' : '') + '>' + C.FORMAS_LANCAMENTO[k] + '</option>').join('') + '</select></label></div></section>';
+
+    if (!ent) {
+      h += '<section class="bloco"><h2>Ingredientes comprados</h2><p class="explica">Opcional. Cada ingrediente marcado aqui tem o preço e o histórico atualizados na biblioteca, na data desta compra, e as receitas são recalculadas.</p><div class="linhas-edit">' +
+        l.itensCompra.map(function (it, i) {
+          const ing = S.dados.ingredientes[it.ingredienteId];
+          return '<div class="linha-edit linha-compra">' +
+            '<label class="campo nome-av"><span>Ingrediente</span><select class="entrada" data-c="itensCompra.' + i + '.ingredienteId"><option value="">Escolha…</option>' + ings.map(x => '<option value="' + esc(x.id) + '"' + (x.id === it.ingredienteId ? ' selected' : '') + '>' + esc(x.nome) + '</option>').join('') + (ing && ing.excluidoEm ? '<option value="' + esc(ing.id) + '" selected>' + esc(ing.nome) + ' (excluído)</option>' : '') + '</select></label>' +
+            '<label class="campo"><span>Embalagens</span><input class="entrada num" data-c="itensCompra.' + i + '.embalagens" data-n inputmode="decimal" value="' + inNum(it.embalagens) + '"></label>' +
+            '<div class="campo"><span>Tamanho de cada</span><div class="qtd" style="display:flex;gap:6px"><input class="entrada num" data-c="itensCompra.' + i + '.qtdEmbalagem" data-n inputmode="decimal" value="' + inNum(it.qtdEmbalagem) + '" aria-label="Tamanho da embalagem"><select class="entrada" data-c="itensCompra.' + i + '.unidade" style="flex:0 0 78px" aria-label="Unidade">' + opcoesUn(ing ? ing.unidade : null, it.unidade) + '</select></div></div>' +
+            (modoEstoque() === 'completo' ? '<label class="campo"><span>Validade</span><input class="entrada" type="date" data-c="itensCompra.' + i + '.validade" value="' + esc(it.validade || '') + '"></label>' : '') +
+            '<label class="campo"><span>Valor pago no item</span><span class="com-prefixo"><i>R$</i><input class="entrada num" data-c="itensCompra.' + i + '.valor" data-n inputmode="decimal" value="' + inNum(it.valor) + '"></span></label>' +
+            '<p class="info-compra" data-compra-info="' + i + '"></p>' +
+            '<button type="button" class="btn-icone" data-acao="rem-compra" data-i="' + i + '" aria-label="Remover ingrediente da compra">' + I.lixo + '</button></div>';
+        }).join('') + '</div><button type="button" class="btn sec" style="margin-top:12px" data-acao="add-compra">' + I.mais + 'Adicionar ingrediente comprado</button>' +
+        (l.itensCompra.length ? '<div class="grade" style="margin-top:14px"><label class="campo"><span>Outros itens da mesma compra</span><span class="com-prefixo"><i>R$</i><input class="entrada num" data-c="outros" data-n inputmode="decimal" value="' + inNum(l.outros) + '" placeholder="0,00"></span><small>O que não está na biblioteca: guardanapos, produtos de limpeza…</small></label></div>' : '') + '</section>';
+    }
+    h += '<section class="bloco"><h2>Valor</h2>' + (!ent && l.itensCompra.length
+      ? '<p class="total-lanc" id="total-lanc"></p><small class="mudo">Soma dos ingredientes e dos outros itens.</small>'
+      : '<label class="campo"><span class="sr">Valor</span><span class="com-prefixo" style="max-width:260px"><i>R$</i><input class="entrada num" data-c="valor" data-n inputmode="decimal" value="' + inNum(l.valor) + '" placeholder="0,00"></span></label>') +
+      '<label class="campo" style="margin-top:14px"><span>Observações</span><textarea class="entrada" data-c="obs" placeholder="Opcional">' + esc(l.obs || '') + '</textarea></label></section>';
+    h += '<div class="barra-salvar"><span class="estado" id="estado-lanc"></span>' +
+      (!e.nova ? '<button type="button" class="btn perigo fino" data-acao="excluir-lanc" aria-label="Excluir lançamento" title="Excluir lançamento">' + I.lixo + '<span>Excluir</span></button>' : '') +
+      '<button type="button" class="btn" data-acao="salvar-lanc">Salvar ' + (ent ? 'entrada' : 'saída') + '</button></div></div>';
+    return h;
+  }
+  function montarEditorLancamento() {
+    const cont = $('.form-lanc'); if (!cont) return;
+    cont.addEventListener('input', aoEditarLanc); cont.addEventListener('change', aoEditarLanc);
+    recalcLanc();
+  }
+  function aoEditarLanc(ev) {
+    const el = ev.target, e = S.editor; if (!e || e.tipo !== 'lancamento') return;
+    const cam = el.dataset.c; if (!cam) return;
+    const porChange = el.tagName === 'SELECT' || el.type === 'date';
+    if (porChange ? ev.type !== 'change' : ev.type !== 'input') return;
+    gravarCaminho(e.d, cam, el.hasAttribute('data-n') ? C.lerNum(el.value) : el.value);
+    marcarSujo();
+    const m = cam.match(/^itensCompra\.(\d+)\.ingredienteId$/);
+    if (m) {
+      const it = e.d.itensCompra[+m[1]], ing = S.dados.ingredientes[it.ingredienteId];
+      if (ing) { it.qtdEmbalagem = ing.qtdEmbalagem; it.unidade = C.normUn(ing.unidade); }
+      render(false); return;
+    }
+    recalcLanc();
+  }
+  function recalcLanc() {
+    const e = S.editor; if (!e || e.tipo !== 'lancamento') return;
+    const l = e.d;
+    l.itensCompra.forEach(function (it, i) {
+      const el = $('[data-compra-info="' + i + '"]'); if (!el) return;
+      const ing = S.dados.ingredientes[it.ingredienteId];
+      if (!ing) { el.textContent = ''; return; }
+      const r = C.aplicarCompra(ing, it, l.data || hoje(), l.id + ':' + it.id);
+      if (!r) { el.className = 'info-compra'; el.textContent = 'Preencha embalagens, tamanho e valor para ver o preço.'; return; }
+      const novo = C.custoIngrediente(r.ing), emb = it.valor / it.embalagens;
+      el.className = 'info-compra' + (r.variacao > 0.004 ? ' neg-txt' : r.variacao < -0.004 ? ' pos-txt' : '');
+      el.textContent = C.brl(emb) + ' por ' + C.num(it.qtdEmbalagem) + ' ' + rotUn(it.unidade) + ' (' + C.brl(novo.porBase, 4) + '/' + novo.base + ')' +
+        (r.precoAtualMudou ? (C.numOk(r.variacao) && Math.abs(r.variacao) >= 0.005 ? '. Antes: ' + porBaseTxt(ing) + ' (' + (r.variacao > 0 ? 'subiu ' : 'caiu ') + C.pct(Math.abs(r.variacao)) + ')' : '. Mesmo preço de antes.') : '. Há uma compra mais recente; o preço atual não muda.');
+    });
+    const tot = totalLancamento(l);
+    const t = $('#total-lanc'); if (t) t.textContent = C.brl(tot || 0);
+    const est = $('#estado-lanc');
+    if (est) est.innerHTML = '<b style="color:var(--ink)">' + (C.numOk(tot) ? (l.tipo === 'entrada' ? '+ ' : '− ') + C.brl(tot) : 'Sem valor') + '</b><br>' + (e.sujo ? 'Alterações não salvas' : (e.nova ? 'Novo lançamento' : 'Tudo salvo'));
+  }
+  function validarLancamento(l) {
+    if (!l.data) return 'Informe a data.';
+    if (l.tipo === 'saida' && l.itensCompra.length) {
+      for (const it of l.itensCompra) {
+        const ing = S.dados.ingredientes[it.ingredienteId];
+        if (!ing) return 'Escolha o ingrediente em todas as linhas da compra.';
+        if (!(it.embalagens > 0)) return ing.nome + ': informe quantas embalagens.';
+        if (!(it.qtdEmbalagem > 0)) return ing.nome + ': informe o tamanho da embalagem.';
+        if (!(C.numOk(it.valor) && it.valor >= 0)) return ing.nome + ': informe o valor pago.';
+        if (!C.mesmaFamilia(it.unidade, ing.unidade)) return ing.nome + ': a unidade não combina com a do ingrediente.';
+      }
+      const ids = l.itensCompra.map(it => it.ingredienteId);
+      if (new Set(ids).size !== ids.length) return 'O mesmo ingrediente aparece duas vezes. Junte numa linha só.';
+    }
+    const tot = totalLancamento(l);
+    if (!(tot > 0)) return 'Informe um valor maior que zero.';
+    return null;
+  }
+  function salvarLancamento() {
+    const e = S.editor, l = e.d;
+    const erro = validarLancamento(l);
+    if (erro) { toast(erro); return false; }
+    if (l.tipo === 'entrada') { l.itensCompra = []; l.outros = null; }
+    l.valor = totalLancamento(l);
+    l.categoria = fonteCanonica(l.categoria, l.tipo) || (l.tipo === 'saida' ? (l.itensCompra.length ? 'Ingredientes' : 'Outras saídas') : 'Outras entradas');
+    l.descricao = String(l.descricao || '').trim() || l.categoria;
+    // Preços dos ingredientes: tira os pontos de itens removidos, aplica os atuais
+    const orig = S.dados.lancamentos[l.id];
+    const trabalho = {}, mudancas = [];
+    const pegar = id => trabalho[id] || S.dados.ingredientes[id];
+    const chavesNovas = new Set(l.itensCompra.map(it => l.id + ':' + it.id));
+    ((orig && orig.itensCompra) || []).forEach(function (it) {
+      const ch = l.id + ':' + it.id, novoIt = l.itensCompra.find(x => x.id === it.id);
+      if (!chavesNovas.has(ch) || (novoIt && novoIt.ingredienteId !== it.ingredienteId)) {
+        const ing = pegar(it.ingredienteId); if (!ing) return;
+        const r = C.removerCompra(ing, ch); if (r) trabalho[ing.id] = r;
+      }
+    });
+    l.itensCompra.forEach(function (it) {
+      const ing = pegar(it.ingredienteId);
+      const r = C.aplicarCompra(ing, it, l.data, l.id + ':' + it.id);
+      trabalho[ing.id] = r.ing;
+      if (r.precoAtualMudou && C.numOk(r.variacao) && Math.abs(r.variacao) >= 0.005) mudancas.push(ing.nome + ' (' + (r.variacao > 0 ? '+' : '−') + C.pct(Math.abs(r.variacao)) + ')');
+    });
+    Object.values(trabalho).forEach(ing => gravarRegistro('ingredientes', ing));
+    gravarRegistro('lancamentos', clone(l));
+    aplicarEstoqueCompra(l);
+    const eraNovo = e.nova;
+    S.editor = null;
+    let msg = (l.tipo === 'entrada' ? 'Entrada ' : 'Saída ') + (eraNovo ? 'registrada.' : 'salva.');
+    if (mudancas.length) msg += ' Preço atualizado: ' + mudancas.join(', ') + '.';
+    const alerta = (cfg().margemAlerta || 0) / 100, ctx = ctxCalc();
+    const ruins = new Set();
+    Object.keys(trabalho).forEach(id => receitasAfetadas(id).forEach(r => { if ((C.calcularReceita(r, ctx).variacoes || []).some(v => v.prejuizo || (C.numOk(v.margemReal) && v.margemReal < alerta))) ruins.add(r.id); }));
+    if (ruins.size) toast(msg + ' ' + (ruins.size === 1 ? '1 receita ficou' : ruins.size + ' receitas ficaram') + ' com margem abaixo do mínimo.', 'Ver', () => ir('#/inicio'));
+    else toast(msg);
+    ir('#/caixa');
+    return true;
+  }
+
+  const ACOES_CAIXA = {
+    'cx-preset': function (el) { const F = filtroCaixa(), p = C.periodoPreset(el.dataset.v, hoje()); F.preset = el.dataset.v; F.de = p.de; F.ate = p.ate; render(false); },
+    'cx-tipo': function (el) { filtroCaixa().tipo = el.dataset.v; render(false); },
+    'cx-fonte': function (el) {
+      const F = filtroCaixa(), v = el.dataset.v, k = C.semAcento(v);
+      F.fontes = F.fontes.some(x => C.semAcento(x) === k) ? F.fontes.filter(x => C.semAcento(x) !== k) : F.fontes.concat([v]);
+      render(false);
+    },
+    'cx-limpar': function () { const F = filtroCaixa(); F.tipo = 'todos'; F.fontes = []; F.busca = ''; render(false); },
+    'cx-barra': function (el) {
+      const b = (S.grafBaldes || [])[+el.dataset.i]; if (!b) return;
+      $$('.graf-col.sel').forEach(x => x.classList.remove('sel')); el.classList.add('sel');
+      const info = $('#graf-info');
+      if (info) info.innerHTML = '<b>' + esc(b.rotulo) + ':</b> entradas <span class="pos-txt">' + C.brl(b.entradas) + '</span>, saídas <span class="neg-txt">' + C.brl(b.saidas) + '</span>, saldo ' + (b.entradas - b.saidas < 0 ? '−' : '') + C.brl(Math.abs(b.entradas - b.saidas));
+    },
+    'cx-csv': function () {
+      const F = filtroCaixa();
+      const blob = new Blob([C.csvMovimentos(S.movsFiltrados || [])], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'caixa-' + F.de + '-a-' + F.ate + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      toast('Planilha exportada. Abre no Excel ou no Google Planilhas.');
+    },
+    'lanc-tipo': function (el) { const l = S.editor.d; l.tipo = el.dataset.v; l.categoria = ''; marcarSujo(); render(false); },
+    'add-compra': function () {
+      const l = S.editor.d;
+      l.itensCompra.push({ id: uid(), ingredienteId: '', embalagens: 1, qtdEmbalagem: null, unidade: 'g', valor: null });
+      if (!l.categoria) l.categoria = 'Ingredientes';
+      marcarSujo(); render(false);
+      setTimeout(() => { const s = $('[data-c="itensCompra.' + (l.itensCompra.length - 1) + '.ingredienteId"]'); if (s) s.focus(); }, 50);
+    },
+    'rem-compra': function (el) { S.editor.d.itensCompra.splice(+el.dataset.i, 1); marcarSujo(); render(false); },
+    'salvar-lanc': function () { salvarLancamento(); },
+    'excluir-lanc': async function () {
+      const l = S.editor.d, orig = S.dados.lancamentos[l.id];
+      const temCompra = orig && (orig.itensCompra || []).length;
+      if (!await confirmar('Excluir lançamento?', 'Excluir <b>' + esc(orig ? orig.descricao : '') + '</b> de ' + C.brl(orig ? orig.valor : 0) + '.' + (temCompra ? ' Os ingredientes desta compra voltam ao preço anterior.' : ''), 'Excluir', true)) return;
+      (orig.itensCompra || []).forEach(function (it) {
+        const ing = S.dados.ingredientes[it.ingredienteId]; if (!ing) return;
+        const r = C.removerCompra(ing, orig.id + ':' + it.id); if (r) gravarRegistro('ingredientes', r);
+      });
+      aplicarEstoqueCompra(orig, true); removerMovsRef('venda:' + orig.id);
+      excluirRegistro('lancamentos', orig.id); S.editor = null; toast('Lançamento excluído.' + (orig.vitrine ? ' A quantidade volta para a vitrine.' : '')); ir('#/caixa');
+    }
+  };
+  document.addEventListener('toggle', function (e) {
+    if (e.target.classList && e.target.classList.contains('mais-filtros')) filtroCaixa().maisAberto = e.target.open;
+  }, true);
+  let timerBuscaCx = null;
+  document.addEventListener('input', function (e) {
+    if (e.target.id !== 'busca-cx') return;
+    filtroCaixa().busca = e.target.value;
+    clearTimeout(timerBuscaCx);
+    timerBuscaCx = setTimeout(function () { render(false); const b = $('#busca-cx'); if (b) { b.focus(); b.setSelectionRange(b.value.length, b.value.length); } }, 350);
+  });
+  document.addEventListener('change', function (e) {
+    const t = e.target;
+    if (t.dataset && t.dataset.cx && t.value) { const F = filtroCaixa(); F[t.dataset.cx] = t.value; F.preset = 'personalizado'; render(false); }
+  });
+
+  // ================= Estoque =================
+  function modoEstoque() { return cfg().estoqueModo || 'manual'; }
+  function movsEstoque() { return lista('estoque'); }
+  function saldos() { return C.saldosEstoque(movsEstoque()); }
+  function nomeVitrine(item) {
+    const [, rid, vid] = item.split(':');
+    const r = S.dados.receitas[rid], v = r && (r.variacoes || []).find(x => x.id === vid);
+    return r ? (r.nome || 'Receita') + ' (' + (v ? v.nome || 'opção' : 'opção removida') + ')' : 'Produto removido';
+  }
+  function registrarMov(item, qtd, motivo, extra) {
+    if (!C.numOk(qtd) || Math.abs(qtd) < 1e-9) return null;
+    const ing = item.startsWith('ing:') ? S.dados.ingredientes[item.slice(4)] : null;
+    const m = Object.assign({ id: uid(), item: item, nome: ing ? ing.nome : nomeVitrine(item), qtd: Math.round(qtd * 10000) / 10000, motivo: motivo, data: hoje(), ref: '', validade: '', obs: '' }, extra || {});
+    gravarRegistro('estoque', m);
+    return m;
+  }
+  function removerMovsRef(ref) {
+    let n = 0;
+    movsEstoque().filter(m => m.ref === ref).forEach(m => { excluirRegistro('estoque', m.id); n++; });
+    return n;
+  }
+  // Pedido: desconta os ingredientes quando entra em produção (modo completo)
+  function aplicarBaixaEstoquePedido(orig, p) {
+    const temBaixa = !!(orig && orig.baixaEstoque);
+    if (modoEstoque() !== 'completo' && !temBaixa) return;
+    const assin = C.assinaturaItensPedido(p);
+    const acao = C.acaoBaixaPedido(orig ? orig.status : null, p.status, temBaixa, temBaixa && orig.baixaEstoque.assinatura !== assin);
+    const ref = 'ped:' + p.id;
+    if (acao === 'remover' || acao === 'atualizar') { removerMovsRef(ref); delete p.baixaEstoque; }
+    if (acao === 'criar' || acao === 'atualizar') {
+      const bx = C.baixaDoPedido(p, ctxCalc());
+      Object.keys(bx).forEach(id => registrarMov(C.chaveIng(id), -bx[id], 'producao', { ref: ref, obs: 'Pedido de ' + nomeCliente(p), data: hoje() }));
+      p.baixaEstoque = { assinatura: assin, em: agoraISO() };
+    }
+  }
+  // Caixa: compra de ingredientes soma ao estoque (modo completo)
+  function aplicarEstoqueCompra(l, excluindo) {
+    const ref = 'compra:' + l.id;
+    const tinha = movsEstoque().some(m => m.ref === ref);
+    if (tinha) removerMovsRef(ref);
+    if (excluindo || modoEstoque() !== 'completo' || l.tipo !== 'saida') return;
+    (l.itensCompra || []).forEach(function (it) {
+      const qb = C.paraBase(it.qtdEmbalagem, it.unidade) * it.embalagens;
+      if (qb > 0) registrarMov(C.chaveIng(it.ingredienteId), qb, 'compra', { ref: ref, data: l.data, validade: it.validade || '', obs: l.descricao || '' });
+    });
+  }
+  function unidadesContagem(ing) {
+    const base = C.UNIDADES[C.normUn(ing.unidade)].base;
+    const emb = C.paraBase(ing.qtdEmbalagem, ing.unidade);
+    const ops = [];
+    if (emb > 0) ops.push({ v: 'emb', r: 'embalagens de ' + C.num(ing.qtdEmbalagem) + ' ' + rotUn(ing.unidade), f: emb });
+    C.unidadesDaFamilia(base).forEach(u => ops.push({ v: u, r: C.UNIDADES[u].rotulo, f: C.UNIDADES[u].fator }));
+    return ops;
+  }
+  function qtdIngTxt(ing, qb) {
+    const base = C.UNIDADES[C.normUn(ing.unidade)].base, emb = C.paraBase(ing.qtdEmbalagem, ing.unidade);
+    return C.qtdLegivel(qb, base) + (emb > 0 && qb > 0 && base !== 'un' ? ' (' + C.num(qb / emb, 1) + (qb / emb === 1 ? ' embalagem' : ' embalagens') + ')' : '');
+  }
+  function chipValidade(st) {
+    if (!st.validade) return '';
+    if (st.vencido) return '<span class="chip neg">' + I.alerta + 'venceu em ' + dataDia(st.validade) + '</span>';
+    if (st.venceLogo) return '<span class="chip alerta">' + I.alerta + (st.diasParaVencer === 0 ? 'vence hoje' : st.diasParaVencer === 1 ? 'vence amanhã' : 'vence em ' + st.diasParaVencer + ' dias') + '</span>';
+    return '<span class="chip mudo">validade ' + dataDia(st.validade) + '</span>';
+  }
+
+  function telaEstoque(q) {
+    const modo = modoEstoque(), v = q.get('v') === 'vitrine' ? 'vitrine' : 'ingredientes';
+    let h = cab('Estoque', modo === 'completo' ? 'Modo completo: compras lançadas no Caixa somam e pedidos em produção descontam sozinhos.' : modo === 'manual' ? 'Modo manual: você lança entradas, perdas e contagens; o app avisa o que está acabando.' : '',
+      modo === 'desligado' ? '' : (v === 'ingredientes' ? '<a class="btn" href="#/contagem">Contar estoque</a>' : '<button type="button" class="btn" data-acao="vitrine-add">' + I.mais + 'Colocar na vitrine</button>')) + abas(ABAS_PED, '#/estoque');
+    if (modo === 'desligado') return h + '<div class="bloco vazio">' + I.emblema + '<h2>Estoque desligado</h2><p>Ligue em Ajustes para acompanhar quanto tem de cada ingrediente, validades e a vitrine de pronta-entrega. Com ele ligado, a lista de compras desconta o que você já tem.</p><a class="btn" href="#/ajustes#estoque">Ir para Ajustes</a></div>';
+    h += '<div class="seg" role="group" aria-label="Tipo de estoque" style="margin-bottom:14px"><a href="#/estoque" aria-pressed="' + (v === 'ingredientes') + '">Ingredientes</a><a href="#/estoque?v=vitrine" aria-pressed="' + (v === 'vitrine') + '">Vitrine</a></div>';
+    const sd = saldos(), cf = cfg(), hj = hoje();
+    if (v === 'vitrine') {
+      const itens = Object.values(sd).filter(x => x.item.startsWith('vit:') && Math.abs(x.qtd) > 1e-9).sort((a, b) => nomeVitrine(a.item).localeCompare(nomeVitrine(b.item), 'pt-BR'));
+      if (!itens.length) return h + '<div class="bloco vazio">' + I.emblema + '<h2>Vitrine vazia</h2><p>Registre os doces prontos para pronta-entrega. Ao vender por aqui, a entrada vai sozinha para o Caixa.' + (modo === 'completo' ? ' No modo completo, colocar na vitrine também desconta os ingredientes usados.' : '') + '</p><button type="button" class="btn" data-acao="vitrine-add">' + I.mais + 'Colocar na vitrine</button></div>';
+      return h + '<div class="lista">' + itens.map(function (x) {
+        const st = C.situacaoEstoque(x, 0, hj, cf.diasAlertaValidade);
+        return '<div class="item"><div class="principal"><div class="nome">' + esc(nomeVitrine(x.item)) + '</div><div class="det">' + (st.negativo ? 'Estoque negativo: confira a contagem' : C.num(x.qtd) + (x.qtd === 1 ? ' unidade' : ' unidades')) + '</div></div>' +
+          '<div class="acoes"><button type="button" class="btn fino" data-acao="vitrine-vender" data-v="' + esc(x.item) + '"' + (x.qtd > 0 ? '' : ' disabled') + '>Vender</button><button type="button" class="btn sec fino" data-acao="vitrine-perda" data-v="' + esc(x.item) + '">Perda</button></div>' +
+          '<div class="chips">' + chipValidade(st) + (st.negativo ? '<span class="chip neg">negativo</span>' : '') + '</div></div>';
+      }).join('') + '</div>';
+    }
+    const ings = lista('ingredientes').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    const f = q.get('f') || 'todos';
+    const linhas = ings.map(function (ing) {
+      const x = sd[C.chaveIng(ing.id)];
+      return { ing: ing, x: x, st: C.situacaoEstoque(x, ing.estoqueMinimo, hj, cf.diasAlertaValidade) };
+    });
+    const nMin = linhas.filter(l => l.st.abaixoMinimo || l.st.negativo).length, nVal = linhas.filter(l => l.st.vencido || l.st.venceLogo).length;
+    const semRegistro = linhas.every(l => !l.x);
+    if (semRegistro) h += '<div class="aviso" style="margin-bottom:14px">' + I.alerta + '<div class="txt">Nada contado ainda. Comece por <a href="#/contagem">Contar estoque</a>: informe quanto tem de cada ingrediente hoje' + (modo === 'completo' ? '; daí em diante, compras e produção atualizam sozinhas.' : '.') + '</div></div>';
+    h += '<div class="seg rolavel" role="group" aria-label="Filtrar" style="margin-bottom:12px"><a href="#/estoque" aria-pressed="' + (f === 'todos') + '">Todos</a><a href="#/estoque?f=minimo" aria-pressed="' + (f === 'minimo') + '">Acabando (' + nMin + ')</a><a href="#/estoque?f=validade" aria-pressed="' + (f === 'validade') + '">Validade (' + nVal + ')</a></div>';
+    h += '<div class="linha-campos" style="margin-bottom:12px"><label class="busca"><span class="sr">Buscar ingrediente</span>' + I.busca + '<input class="entrada" id="busca-est" type="search" placeholder="Buscar ingrediente"></label></div>';
+    const peso = l => (l.st.negativo || l.st.abaixoMinimo || l.st.vencido || l.st.venceLogo) ? 0 : l.x ? 1 : 2;
+    linhas.sort((x, y) => peso(x) - peso(y) || x.ing.nome.localeCompare(y.ing.nome, 'pt-BR'));
+    const vis = linhas.filter(l => f === 'minimo' ? (l.st.abaixoMinimo || l.st.negativo) : f === 'validade' ? (l.st.vencido || l.st.venceLogo) : true);
+    if (!vis.length) return h + '<p class="mudo" style="padding:12px 4px">Nada aqui. ' + (f === 'minimo' ? 'Nenhum ingrediente abaixo do mínimo.' : 'Nenhuma validade próxima.') + '</p>';
+    h += '<div class="lista" id="lista-est">' + vis.map(function (l) {
+      const ing = l.ing, st = l.st;
+      return '<button type="button" class="item" data-acao="estoque-item" data-id="' + esc(ing.id) + '" data-busca="' + esc(normBusca(ing.nome)) + '"><div class="principal"><div class="nome">' + esc(ing.nome) + '</div><div class="det">' +
+        (l.x ? (st.negativo ? 'Negativo: ' + qtdIngTxt(ing, st.qtd) : qtdIngTxt(ing, Math.max(0, st.qtd))) : 'não contado') + (C.numOk(ing.estoqueMinimo) && ing.estoqueMinimo > 0 ? ', mínimo ' + C.qtdLegivel(ing.estoqueMinimo, C.UNIDADES[C.normUn(ing.unidade)].base) : '') + '</div></div>' + I.seta +
+        '<div class="chips">' + (st.negativo ? '<span class="chip neg">' + I.alerta + 'negativo: conte de novo</span>' : st.abaixoMinimo ? '<span class="chip alerta">' + I.alerta + 'abaixo do mínimo</span>' : '') + chipValidade(st) + '</div></button>';
+    }).join('') + '</div><p class="mudo" id="sem-res-est" hidden style="padding:16px">Nenhum ingrediente com esse nome.</p>';
+    return h;
+  }
+  function montarFiltroEstoque() {
+    const b = $('#busca-est'); if (!b) return;
+    b.addEventListener('input', function () {
+      const q = normBusca(b.value); let n = 0;
+      $$('#lista-est .item').forEach(el => { const v = !q || el.dataset.busca.includes(q); el.hidden = !v; if (v) n++; });
+      $('#sem-res-est').hidden = n > 0;
+    });
+  }
+  function folhaItemEstoque(id, acaoInicial) {
+    const ing = S.dados.ingredientes[id]; if (!ing) return;
+    const item = C.chaveIng(id), sd = saldos()[item], base = C.UNIDADES[C.normUn(ing.unidade)].base;
+    const st = C.situacaoEstoque(sd, ing.estoqueMinimo, hoje(), cfg().diasAlertaValidade);
+    const hist = movsEstoque().filter(m => m.item === item).sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(b.criadoEm || '').localeCompare(String(a.criadoEm || ''))).slice(0, 8);
+    const uns = unidadesContagem(ing);
+    let acao = acaoInicial || 'ajuste';
+    const corpo = '<div class="stats" style="margin:0"><div class="stat"><div class="r">Tem agora</div><div class="n' + (st.negativo ? ' neg-txt' : '') + '">' + (sd ? C.qtdLegivel(st.qtd, base) : '—') + '</div></div><div class="stat"><div class="r">Validade</div><div class="n" style="font-size:18px">' + (st.validade ? dataDia(st.validade) : '—') + '</div></div></div>' +
+      '<div class="seg" role="group" aria-label="O que registrar">' + [['ajuste', 'Contagem'], ['entrada', 'Entrada'], ['perda', 'Perda']].map(a => '<button type="button" data-ac="' + a[0] + '" aria-pressed="' + (a[0] === acao) + '">' + a[1] + '</button>').join('') + '</div>' +
+      '<form id="f-est" style="display:flex;flex-direction:column;gap:12px"><p class="mudo" id="exp-est"></p>' +
+      '<div class="campo"><span id="rot-qtd">Quanto tem agora</span><div class="linha-campos" style="flex-wrap:nowrap"><input class="entrada num" name="qtd" inputmode="decimal" required aria-labelledby="rot-qtd"><select class="entrada" name="un" style="flex:0 1 auto" aria-label="Unidade">' + uns.map(u => '<option value="' + u.v + '">' + esc(u.r) + '</option>').join('') + '</select></div></div>' +
+      '<label class="campo" id="campo-val"><span>Validade (opcional)</span><input class="entrada" type="date" name="validade"></label>' +
+      '<label class="campo"><span>Observação</span><input class="entrada" name="obs" placeholder="Opcional"></label>' +
+      '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Fechar</button><button class="btn" type="submit" id="btn-est">Registrar</button></div></form>' +
+      '<hr class="separa"><label class="campo"><span>Estoque mínimo</span><div class="linha-campos" style="flex-wrap:nowrap"><input class="entrada num" id="min-est" inputmode="decimal" value="' + inNum(ing.estoqueMinimo) + '" placeholder="sem mínimo"><span class="mudo" style="flex:0 0 auto;align-self:center">' + base + '</span><button type="button" class="btn sec fino" id="salvar-min" style="flex:0 0 auto">Salvar mínimo</button></div><small>Abaixo disso, o app avisa no Início e aqui no Estoque.</small></label>' +
+      (hist.length ? '<div><h3>Últimos registros</h3><ul class="historico">' + hist.map(m => '<li><span>' + dataDia(m.data) + ', ' + esc(C.MOTIVOS_ESTOQUE[m.motivo] || m.motivo) + (m.obs ? ' <small class="mudo">' + esc(m.obs) + '</small>' : '') + '</span><span class="' + (m.qtd < 0 ? 'neg-txt' : 'pos-txt') + '">' + (m.qtd > 0 ? '+' : '−') + C.qtdLegivel(Math.abs(m.qtd), base) + '</span></li>').join('') + '</ul></div>' : '');
+    abrirFolha(ing.nome, corpo, function (d) {
+      const f = $('#f-est', d);
+      function ajustar() {
+        $$('[data-ac]', d).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ac === acao)));
+        $('#rot-qtd', d).textContent = acao === 'ajuste' ? 'Quanto tem agora' : acao === 'entrada' ? 'Quanto entrou' : 'Quanto foi perdido ou descartado';
+        $('#exp-est', d).textContent = acao === 'ajuste' ? 'Conte o que tem de fato. O app registra a diferença em relação ao que ele calculava.' : acao === 'entrada' ? 'Use para o que chegou sem ser lançado como compra no Caixa (doação, sobra de outra receita).' : 'Venceu, estragou, caiu no chão.';
+        $('#campo-val', d).hidden = acao === 'perda';
+        $('#btn-est', d).textContent = acao === 'ajuste' ? 'Registrar contagem' : acao === 'entrada' ? 'Registrar entrada' : 'Registrar perda';
+      }
+      $$('[data-ac]', d).forEach(b => b.onclick = () => { acao = b.dataset.ac; ajustar(); });
+      ajustar();
+      f.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const n = C.lerNum(f.qtd.value);
+        if (!C.numOk(n) || n < 0 || (acao !== 'ajuste' && n === 0)) { toast('Informe uma quantidade válida.'); return; }
+        const fator = uns.find(u => u.v === f.un.value).f, qb = n * fator;
+        const atual = sd ? sd.qtd : 0;
+        const delta = acao === 'ajuste' ? qb - atual : acao === 'entrada' ? qb : -qb;
+        if (acao === 'ajuste' && Math.abs(delta) < 1e-9 && !f.validade.value) { d.close(); toast('Contagem confere com o estoque.'); return; }
+        const m = { item: item, nome: ing.nome, motivo: acao, validade: acao === 'perda' ? '' : f.validade.value, obs: f.obs.value.trim() };
+        if (Math.abs(delta) < 1e-9) gravarRegistro('estoque', Object.assign({ id: uid(), qtd: 0, data: hoje(), ref: '' }, m));
+        else registrarMov(item, delta, acao, m);
+        d.close(); toast(acao === 'ajuste' ? 'Contagem registrada.' : acao === 'entrada' ? 'Entrada registrada.' : 'Perda registrada.'); render(false);
+      });
+      $('#salvar-min', d).onclick = function () {
+        const v = C.lerNum($('#min-est', d).value);
+        const c = clone(S.dados.ingredientes[id]); c.estoqueMinimo = C.numOk(v) && v > 0 ? v : null;
+        gravarRegistro('ingredientes', c); toast('Mínimo salvo.'); d.close(); render(false);
+      };
+    });
+  }
+  function telaContagem() {
+    if (modoEstoque() === 'desligado') { location.hash = '#/estoque'; return ''; }
+    if (!S.editor || S.editor.tipo !== 'contagem') S.editor = { tipo: 'contagem', sujo: false };
+    const ings = lista('ingredientes').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    const sd = saldos();
+    let h = '<div class="cab-pagina"><div class="titulos"><a href="#/estoque" class="link-btn voltar">' + I.voltar + 'Estoque</a><h1>Contar estoque</h1><p class="sub">Preencha só o que contou. Linhas em branco ficam como estão.</p></div></div>';
+    h += '<section class="bloco"><div class="grade" style="margin-bottom:10px"><label class="campo"><span>Data da contagem</span><input class="entrada" type="date" id="data-cont" value="' + hoje() + '"></label></div><div class="lista-contagem">' + ings.map(function (ing) {
+      const x = sd[C.chaveIng(ing.id)];
+      return '<div class="linha-contagem" data-id="' + esc(ing.id) + '"><div class="principal"><b>' + esc(ing.nome) + '</b><small>' + (x ? 'No app: ' + qtdIngTxt(ing, x.qtd) : 'Não contado') + '</small></div>' +
+        '<div class="linha-campos" style="flex-wrap:nowrap"><input class="entrada num" data-cont-qtd inputmode="decimal" placeholder="—" aria-label="Quanto tem de ' + esc(ing.nome) + '"><select class="entrada" data-cont-un aria-label="Unidade">' + unidadesContagem(ing).map(u => '<option value="' + u.v + '">' + esc(u.v === 'emb' ? 'embal. (' + C.num(ing.qtdEmbalagem) + ' ' + rotUn(ing.unidade) + ')' : u.r) + '</option>').join('') + '</select></div></div>';
+    }).join('') + '</div></section>';
+    h += '<div class="barra-salvar"><span class="estado" id="estado-cont">Nada preenchido</span><button type="button" class="btn" data-acao="salvar-contagem">Salvar contagem</button></div>';
+    return h;
+  }
+  function montarContagem() {
+    const cont = $('.lista-contagem'); if (!cont) return;
+    cont.addEventListener('input', function () {
+      const n = $$('[data-cont-qtd]').filter(i => i.value.trim() !== '').length;
+      $('#estado-cont').textContent = n ? n + (n === 1 ? ' ingrediente preenchido' : ' ingredientes preenchidos') : 'Nada preenchido';
+      if (S.editor && S.editor.tipo === 'contagem') S.editor.sujo = n > 0;
+    });
+  }
+  function folhaVitrine(modo, item) {
+    const ctx = ctxCalc();
+    const titulo = { add: 'Colocar na vitrine', vender: 'Vender da vitrine', perda: 'Perda na vitrine' }[modo];
+    let prodSel = '';
+    const ops = [];
+    if (modo === 'add') {
+      lista('receitas').sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).forEach(r => (C.calcularReceita(r, ctx).variacoes || []).forEach(v => ops.push({ r: r, v: v })));
+      if (!ops.length) { abrirFolha(titulo, '<p>Cadastre uma receita com opções de venda para colocar na vitrine.</p>'); return; }
+      prodSel = '<label class="campo"><span>Produto</span><select class="entrada" name="prod">' + ops.map((o, i) => '<option value="' + i + '">' + esc(o.r.nome + ' (' + (o.v.nome || 'opção') + ')') + '</option>').join('') + '</select></label>';
+    }
+    const sd = item ? saldos()[item] : null;
+    let preco = null;
+    if (modo === 'vender') {
+      const [, rid, vid] = item.split(':'); const r = S.dados.receitas[rid];
+      const v = r && (C.calcularReceita(r, ctx).variacoes || []).find(x => x.id === vid);
+      preco = v && C.numOk(v.preco) ? C.round2(v.preco) : null;
+    }
+    const corpo = '<form id="f-vit" style="display:flex;flex-direction:column;gap:12px">' + (item ? '<p><b>' + esc(nomeVitrine(item)) + '</b>' + (sd ? ', ' + C.num(sd.qtd) + ' na vitrine' : '') + '</p>' : '') + prodSel +
+      '<label class="campo"><span>Quantidade</span><input class="entrada num" name="qtd" inputmode="decimal" required value="1"></label>' +
+      (modo === 'add' ? '<label class="campo"><span>Validade (opcional)</span><input class="entrada" type="date" name="validade"></label>' + (modoEstoque() === 'completo' ? '<p class="mudo">No modo completo, os ingredientes usados saem do estoque.</p>' : '') : '') +
+      (modo === 'vender' ? '<div class="linha-campos"><label class="campo"><span>Preço unitário</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="preco" inputmode="decimal" required value="' + inNum(preco) + '"></span></label><label class="campo"><span>Forma</span><select class="entrada" name="forma">' + Object.keys(C.FORMAS_LANCAMENTO).map(k => '<option value="' + k + '">' + C.FORMAS_LANCAMENTO[k] + '</option>').join('') + '</select></label></div><p class="mudo" id="tot-vit"></p><p class="mudo">A venda entra no Caixa como "Venda de balcão".</p>' : '') +
+      '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">' + { add: 'Colocar na vitrine', vender: 'Registrar venda', perda: 'Registrar perda' }[modo] + '</button></div></form>';
+    abrirFolha(titulo, corpo, function (d) {
+      const f = $('#f-vit', d);
+      function tot() { const t = $('#tot-vit', d); if (t) t.textContent = 'Total: ' + C.brl((C.lerNum(f.qtd.value) || 0) * (C.lerNum(f.preco.value) || 0)); }
+      if (modo === 'vender') { f.addEventListener('input', tot); tot(); }
+      f.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const n = C.lerNum(f.qtd.value);
+        if (!(n > 0)) { toast('Informe a quantidade.'); return; }
+        if (modo === 'add') {
+          const o = ops[+f.prod.value], chave = C.chaveVitrine(o.r.id, o.v.id);
+          const m = registrarMov(chave, n, 'vitrine', { validade: f.validade.value });
+          if (modoEstoque() === 'completo' && m) {
+            const bx = C.baixaDoPedido({ itens: [{ tipo: 'rec', receitaId: o.r.id, variacaoId: o.v.id, qtd: n }] }, ctx);
+            Object.keys(bx).forEach(id => registrarMov(C.chaveIng(id), -bx[id], 'producao', { ref: 'vit:' + m.id, obs: 'Vitrine: ' + nomeVitrine(chave) }));
+          }
+          toast('Colocado na vitrine.');
+        } else if (modo === 'vender') {
+          const pu = C.lerNum(f.preco.value);
+          if (!(pu > 0)) { toast('Informe o preço.'); return; }
+          const l = { id: uid(), tipo: 'entrada', data: hoje(), valor: C.round2(n * pu), categoria: fonteCanonica('Venda de balcão', 'entrada'), descricao: C.num(n) + 'x ' + nomeVitrine(item) + ' (vitrine)', forma: f.forma.value, obs: '', itensCompra: [], vitrine: { item: item, qtd: n } };
+          gravarRegistro('lancamentos', l);
+          registrarMov(item, -n, 'venda', { ref: 'venda:' + l.id });
+          toast('Venda registrada: ' + C.brl(l.valor) + ' no Caixa.');
+        } else {
+          registrarMov(item, -n, 'perda', {});
+          toast('Perda registrada.');
+        }
+        d.close(); render(false);
+      });
+    });
+  }
+
+  // ---------- Início: avisos do estoque ----------
+  function blocoEstoqueInicio() {
+    if (modoEstoque() === 'desligado') return '';
+    const sd = saldos(), cf = cfg(), hj = hoje();
+    const baixos = [], validade = [];
+    lista('ingredientes').forEach(function (ing) {
+      const x = sd[C.chaveIng(ing.id)]; if (!x) return;
+      const st = C.situacaoEstoque(x, ing.estoqueMinimo, hj, cf.diasAlertaValidade);
+      if (st.abaixoMinimo || st.negativo) baixos.push({ nome: ing.nome, id: ing.id, st: st, txt: st.negativo ? 'negativo' : qtdIngTxt(ing, st.qtd) });
+      if (st.vencido || st.venceLogo) validade.push({ nome: ing.nome, id: ing.id, st: st });
+    });
+    Object.values(sd).filter(x => x.item.startsWith('vit:') && x.qtd > 0).forEach(function (x) {
+      const st = C.situacaoEstoque(x, 0, hj, cf.diasAlertaValidade);
+      if (st.vencido || st.venceLogo) validade.push({ nome: nomeVitrine(x.item) + ' (vitrine)', vit: true, st: st });
+    });
+    if (!baixos.length && !validade.length) return '';
+    let h = '<section class="bloco"><div class="cab-bloco"><h2>Estoque</h2><a class="link-btn" href="#/estoque">Ver estoque</a></div><div class="lista">';
+    validade.sort((a, b) => a.st.diasParaVencer - b.st.diasParaVencer).forEach(v => { h += '<a class="item" href="' + (v.vit ? '#/estoque?v=vitrine' : '#/estoque?f=validade') + '"><div class="principal"><div class="nome">' + esc(v.nome) + '</div></div>' + chipValidade(v.st) + '</a>'; });
+    baixos.slice(0, 6).forEach(b => { h += '<a class="item" href="#/estoque?f=minimo"><div class="principal"><div class="nome">' + esc(b.nome) + '</div><div class="det">Tem ' + esc(b.txt) + '</div></div><span class="chip ' + (b.st.negativo ? 'neg' : 'alerta') + '">' + (b.st.negativo ? 'negativo' : 'abaixo do mínimo') + '</span></a>'; });
+    h += '</div>' + (baixos.length > 6 ? '<a class="link-btn" href="#/estoque?f=minimo">Ver todos os ' + baixos.length + ' abaixo do mínimo</a>' : '') + '</section>';
+    return h;
+  }
+
+  const ACOES_ESTOQUE = {
+    'estoque-item': function (el) { folhaItemEstoque(el.dataset.id); },
+    'vitrine-add': function () { folhaVitrine('add'); },
+    'vitrine-vender': function (el) { folhaVitrine('vender', el.dataset.v); },
+    'vitrine-perda': function (el) { folhaVitrine('perda', el.dataset.v); },
+    'salvar-contagem': function () {
+      const data = ($('#data-cont') || {}).value || hoje();
+      const sd = saldos(); let n = 0;
+      $$('.linha-contagem').forEach(function (row) {
+        const v = row.querySelector('[data-cont-qtd]').value.trim(); if (v === '') return;
+        const qtd = C.lerNum(v); if (!C.numOk(qtd) || qtd < 0) return;
+        const ing = S.dados.ingredientes[row.dataset.id];
+        const u = unidadesContagem(ing).find(x => x.v === row.querySelector('[data-cont-un]').value);
+        const item = C.chaveIng(ing.id), atual = sd[item] ? sd[item].qtd : 0;
+        const delta = qtd * u.f - atual;
+        if (Math.abs(delta) > 1e-9) registrarMov(item, delta, 'ajuste', { data: data, obs: 'Contagem geral' });
+        else if (!sd[item]) gravarRegistro('estoque', { id: uid(), item: item, nome: ing.nome, qtd: 0, motivo: 'ajuste', data: data, ref: '', validade: '', obs: 'Contagem geral' });
+        n++;
+      });
+      if (!n) { toast('Preencha pelo menos um ingrediente.'); return; }
+      S.editor = null;
+      toast(n === 1 ? '1 ingrediente contado.' : n + ' ingredientes contados.'); ir('#/estoque');
+    },
+    'modo-estoque': function (el) { const c = clone(cfg()); c.estoqueModo = el.dataset.v; gravarRegistro('config', c); render(false); }
+  };
 
   // ================= Ajustes =================
   function telaAjustes() {
@@ -1600,7 +2255,7 @@
     h += '</section>';
 
     // Custos fixos
-    h += '<h2 class="titulo-grupo">Ajustes da doceria</h2><p class="mudo" style="margin:-4px 0 10px">Custos fixos, mão de obra, preços e taxas e dados da doceria valem para todos os aparelhos. Na planilha, ficam na aba Ajustes.</p>' +
+    h += '<h2 class="titulo-grupo">Ajustes da doceria</h2><p class="mudo" style="margin:-4px 0 10px">Estes ajustes valem para todos os aparelhos. Custos fixos, mão de obra, preços e taxas e dados da doceria aparecem por extenso na aba Ajustes da planilha.</p>' +
       '<div id="estado-ajustes" class="aviso" role="status" style="margin-bottom:16px"></div>';
     h += '<section class="bloco" id="fixos"><h2>Custos fixos do mês</h2><p class="explica">Contas que chegam todo mês, vendendo ou não. O total é dividido pelas horas de produção e entra no custo de cada receita conforme o tempo dela. Quando o módulo de caixa chegar, estes valores virão das despesas lançadas.</p><div class="linhas-edit">' +
       cf.custosFixos.map((c, i) => '<div class="linha-edit" style="grid-template-columns:1fr 150px auto"><input class="entrada" data-cfg="custosFixos.' + i + '.nome" value="' + esc(c.nome) + '" aria-label="Nome do custo"><span class="com-prefixo"><i>R$</i><input class="entrada num" data-cfg="custosFixos.' + i + '.valor" data-n inputmode="decimal" value="' + inNum(c.valor) + '" aria-label="Valor de ' + esc(c.nome) + '"></span><button type="button" class="btn-icone" data-acao="rem-fixo" data-i="' + i + '" aria-label="Remover ' + esc(c.nome) + '">' + I.lixo + '</button></div>').join('') +
@@ -1633,6 +2288,11 @@
 
     // Doceria
     const dc = cf.doceria;
+    const me = cf.estoqueModo || 'manual';
+    h += '<section class="bloco" id="estoque"><h2>Estoque</h2><div class="seg" role="group" aria-label="Modo do estoque">' +
+      [['completo', 'Completo'], ['manual', 'Só manual'], ['desligado', 'Desligado']].map(o => '<button type="button" data-acao="modo-estoque" data-v="' + o[0] + '" aria-pressed="' + (me === o[0]) + '">' + o[1] + '</button>').join('') + '</div>' +
+      '<p class="explica" style="margin:10px 0 0">' + (me === 'completo' ? 'Compras lançadas no Caixa somam ao estoque, pedidos que entram em produção descontam os ingredientes e a vitrine desconta o que for feito para ela. Você ainda pode contar e corrigir quando quiser.' : me === 'manual' ? 'Você registra entradas, perdas e contagens na aba Estoque. O app avisa o que está abaixo do mínimo ou perto de vencer, e a lista de compras desconta o que você tem.' : 'A aba Estoque fica desativada e a lista de compras não desconta nada.') + '</p>' +
+      (me !== 'desligado' ? '<div class="grade" style="margin-top:14px"><label class="campo"><span>Avisar sobre validade com antecedência de</span><span class="com-prefixo"><input class="entrada num" data-cfg="diasAlertaValidade" data-n inputmode="numeric" value="' + inNum(cf.diasAlertaValidade) + '"><i class="dir">dias</i></span></label></div>' : '') + '</section>';
     h += '<section class="bloco"><h2>Dados da doceria</h2><p class="explica">Aparecem nos orçamentos e comprovantes para WhatsApp (próxima etapa).</p><div class="grade">' +
       ['nome:Nome', 'instagram:Instagram', 'telefone:Telefone', 'email:E-mail'].map(x => { const [k, r] = x.split(':'); return '<label class="campo"><span>' + r + '</span><input class="entrada" data-cfg="doceria.' + k + '" value="' + esc(dc[k]) + '"></label>'; }).join('') + '</div></section>';
 
@@ -1687,7 +2347,7 @@
     try { j = JSON.parse(await arq.text()); } catch (e) { toast('Arquivo inválido: não é um backup do Espaço Nave.'); return; }
     if (!j || j.app !== 'espaco-nave' || !j.dados) { toast('Arquivo inválido: não é um backup do Espaço Nave.'); return; }
     const tabs = TABELAS_LOCAIS.filter(t => j.dados[t] && typeof j.dados[t] === 'object');
-    const nomes = { ingredientes: 'ingredientes', receitas: 'receitas', config: 'configurações', clientes: 'clientes', pedidos: 'pedidos' };
+    const nomes = { ingredientes: 'ingredientes', receitas: 'receitas', config: 'configurações', clientes: 'clientes', pedidos: 'pedidos', lancamentos: 'lançamentos do caixa', estoque: 'registros de estoque' };
     const partes = tabs.map(t => t === 'config' ? 'as configurações' : Object.values(j.dados[t]).filter(r => r && !r.excluidoEm).length + ' ' + nomes[t]);
     const ok = await confirmar('Substituir os dados?', 'O arquivo traz ' + partes.join(', ') + '. Isso vai substituir ' + tabs.map(t => nomes[t]).join(' e ') + ' que estão no app' + (S.meta.modo === 'planilha' ? ' e na planilha' : '') + '; o que não estiver no arquivo será excluído.', 'Substituir dados', true);
     if (!ok) return;
@@ -1783,7 +2443,7 @@
     },
     'dispensar-conflito': function (el) { S.meta.conflitos = S.meta.conflitos.filter(x => x.id !== el.dataset.id); salvarLocal(); render(false); }
   };
-  Object.assign(ACOES, ACOES_PED);
+  Object.assign(ACOES, ACOES_PED, ACOES_CAIXA, ACOES_ESTOQUE);
   function resumoDiferencas(a, b) {
     a = a || {}; b = b || {};
     const ks = Array.from(new Set(Object.keys(a).concat(Object.keys(b)))).filter(k => !/Em$|^id$|^historico$/.test(k));
