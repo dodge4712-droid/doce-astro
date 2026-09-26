@@ -78,6 +78,7 @@
     taxas: { debito: 1.99, credito: 4.98, parcelado: 9.9, app: 23, entrega: 8 },
     margemPadrao: 40,
     margemAlerta: 25,
+    sinalPadraoPct: 50,
     doceria: { nome: 'Doce Astro', instagram: '@doce.astro', telefone: '(11) 91220-9162', email: 'doceastro@gmail.com' }
   };
 
@@ -301,12 +302,197 @@
     return { de: ref.porBase, para: atual.porBase, variacao: atual.porBase / ref.porBase - 1, desde: ref.data };
   }
 
+
+  // ---------- Datas (sempre no fuso do aparelho, formato AAAA-MM-DD) ----------
+  function dataISO(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function paraData(iso) { const p = String(iso || '').split('-').map(Number); return p.length === 3 && p[0] ? new Date(p[0], p[1] - 1, p[2]) : null; }
+  function somarDias(iso, n) { const d = paraData(iso); if (!d) return null; d.setDate(d.getDate() + n); return dataISO(d); }
+  function diasEntre(a, b) { const x = paraData(a), y = paraData(b); return x && y ? Math.round((y - x) / 864e5) : null; }
+  function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
+
+  // ---------- Pedidos ----------
+  const FORMAS_PAGAMENTO = {
+    pix: { rotulo: 'Pix', taxa: null },
+    dinheiro: { rotulo: 'Dinheiro', taxa: null },
+    debito: { rotulo: 'Cartão de débito', taxa: 'debito' },
+    credito: { rotulo: 'Cartão de crédito', taxa: 'credito' },
+    app: { rotulo: 'Aplicativo de entrega', taxa: 'app' }
+  };
+  const STATUS_PEDIDO = {
+    orcamento: { rotulo: 'Orçamento', ordem: 0 },
+    confirmado: { rotulo: 'Confirmado', ordem: 1 },
+    producao: { rotulo: 'Em produção', ordem: 2 },
+    pronto: { rotulo: 'Pronto', ordem: 3 },
+    entregue: { rotulo: 'Entregue', ordem: 4 },
+    cancelado: { rotulo: 'Cancelado', ordem: 5 }
+  };
+  function taxaFormaPct(cfg, forma) {
+    const f = FORMAS_PAGAMENTO[forma];
+    return f && f.taxa ? (cfg.taxas[f.taxa] || 0) : 0;
+  }
+  function custoItemPedido(it, ctx) {
+    if (it.tipo === 'avulso') return numOk(it.custoUnit) ? it.custoUnit : null;
+    const rec = ctx.receitas[it.receitaId];
+    if (!rec || rec.excluidoEm) return numOk(it.custoUnit) ? it.custoUnit : null;
+    const r = calcularReceita(rec, ctx);
+    const v = (r.variacoes || []).find(x => x.id === it.variacaoId);
+    return v && numOk(v.custo) ? v.custo : (numOk(it.custoUnit) ? it.custoUnit : null);
+  }
+  function calcularPedido(p, ctx) {
+    const cfg = mesclarConfig(ctx.config);
+    let subtotal = 0, custo = 0, custoCompleto = true;
+    const itens = (p.itens || []).map(function (it) {
+      const q = numOk(it.qtd) ? it.qtd : 0, pu = numOk(it.precoUnit) ? it.precoUnit : 0;
+      const cu = custoItemPedido(it, ctx);
+      subtotal += q * pu;
+      if (numOk(cu)) custo += cu * q; else if (q > 0) custoCompleto = false;
+      return { id: it.id, total: q * pu, custoUnit: cu, custo: numOk(cu) ? cu * q : null };
+    });
+    const taxaEntrega = p.tipoEntrega === 'entrega' && numOk(p.taxaEntrega) ? p.taxaEntrega : 0;
+    const desconto = numOk(p.desconto) ? p.desconto : 0;
+    const total = round2(Math.max(0, subtotal + taxaEntrega - desconto));
+    const pago = round2((p.pagamentos || []).reduce((s, x) => s + (numOk(x.valor) ? x.valor : 0), 0));
+    const restante = round2(total - pago);
+    const taxaPagamento = total * taxaFormaPct(cfg, p.formaPagamento) / 100;
+    // A taxa de entrega é repasse (motoboy/combustível): não conta como lucro dos doces.
+    const lucro = custoCompleto && itens.length ? total - taxaEntrega - custo - taxaPagamento : null;
+    let situacao = 'pendente';
+    if (total > 0 && restante <= 0.004) situacao = restante < -0.004 ? 'excedente' : 'pago';
+    else if (pago > 0.004) situacao = 'parcial';
+    return {
+      itens: itens, subtotal: round2(subtotal), taxaEntrega: taxaEntrega, desconto: desconto, total: total,
+      pago: pago, restante: restante, custo: custoCompleto ? custo : null, taxaPagamento: taxaPagamento,
+      lucro: lucro, margem: numOk(lucro) && total - taxaEntrega > 0 ? lucro / (total - taxaEntrega) : null,
+      situacao: situacao, sinalSugerido: round2(total * (cfg.sinalPadraoPct || 0) / 100)
+    };
+  }
+
+  // Quanto produzir e quanto comprar para um conjunto de pedidos.
+  // Desmonta receita dentro de receita e aplica a perda de cada uma.
+  function necessidades(pedidos, ctx) {
+    const producao = {}, compras = {}, avisos = [];
+    function expandir(recId, qtdBase, pilha, direto) {
+      const rec = ctx.receitas[recId];
+      if (!rec || rec.excluidoEm) { avisos.push('Uma receita usada nos pedidos foi excluída.'); return; }
+      if (pilha.indexOf(recId) >= 0) { avisos.push((rec.nome || 'Receita') + ': receitas usam uma à outra em ciclo.'); return; }
+      const p = producao[recId] || (producao[recId] = { receitaId: recId, qtdBase: 0, direto: 0 });
+      p.qtdBase += qtdBase; if (direto) p.direto += qtdBase;
+      const rend = rec.rendimento || {};
+      const rendBase = paraBase(rend.qtd, rend.unidade);
+      if (!(rendBase > 0)) { avisos.push((rec.nome || 'Receita') + ': sem rendimento, os ingredientes dela ficaram de fora.'); return; }
+      p.rendBase = rendBase; p.unidadeBase = UNIDADES[normUn(rend.unidade)].base;
+      const perda = numOk(rec.perdaPct) && rec.perdaPct > 0 && rec.perdaPct < 100 ? rec.perdaPct / 100 : 0;
+      const fator = qtdBase / rendBase / (1 - perda);
+      (rec.itens || []).forEach(function (it) {
+        const q = paraBase(it.qtd, it.unidade);
+        if (!numOk(q)) return;
+        if (it.tipo === 'rec') expandir(it.refId, q * fator, pilha.concat([recId]), false);
+        else {
+          const c = compras[it.refId] || (compras[it.refId] = { ingredienteId: it.refId, qtdBase: 0 });
+          c.qtdBase += q * fator;
+        }
+      });
+    }
+    (pedidos || []).forEach(function (pd) {
+      (pd.itens || []).forEach(function (it) {
+        if (it.tipo !== 'rec' || !numOk(it.qtd) || it.qtd <= 0) return;
+        const rec = ctx.receitas[it.receitaId];
+        if (!rec || rec.excluidoEm) { avisos.push((it.nome || 'Item') + ': a receita foi excluída.'); return; }
+        const v = (rec.variacoes || []).find(x => x.id === it.variacaoId);
+        if (!v) { avisos.push((it.nome || rec.nome) + ': a opção de venda não existe mais na receita.'); return; }
+        const qb = paraBase(v.qtd, v.unidade || (rec.rendimento && rec.rendimento.unidade));
+        if (!numOk(qb)) { avisos.push((it.nome || rec.nome) + ': a opção de venda não diz quanto usa da receita.'); return; }
+        expandir(rec.id, qb * it.qtd, [], true);
+      });
+    });
+    Object.values(compras).forEach(function (c) {
+      const ing = ctx.ingredientes[c.ingredienteId];
+      if (!ing) return;
+      const emb = paraBase(ing.qtdEmbalagem, ing.unidade);
+      c.base = UNIDADES[normUn(ing.unidade)] ? UNIDADES[normUn(ing.unidade)].base : null;
+      if (emb > 0) { c.embalagens = Math.ceil(c.qtdBase / emb - 1e-9); c.custoEmbalagens = c.embalagens * (ing.valorPago || 0); }
+      const ci = custoIngrediente(ing);
+      c.custoProporcional = ci ? ci.porBase * c.qtdBase : null;
+    });
+    return { producao: producao, compras: compras, avisos: Array.from(new Set(avisos)) };
+  }
+
+  function qtdLegivel(qtdBase, base) {
+    if (!numOk(qtdBase)) return '—';
+    if (base === 'g' && qtdBase >= 1000) return num(qtdBase / 1000, 2) + ' kg';
+    if (base === 'ml' && qtdBase >= 1000) return num(qtdBase / 1000, 2) + ' L';
+    if (base === 'un') return num(qtdBase, 1) + ' un';
+    return num(qtdBase, 0) + ' ' + (base || '');
+  }
+
+  // ---------- WhatsApp ----------
+  function telefoneWhats(tel) {
+    let d = String(tel || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length === 10 || d.length === 11) d = '55' + d;
+    return d.length >= 12 && d.length <= 13 ? d : '';
+  }
+  const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  function dataFalada(iso, hoje) {
+    const d = paraData(iso); if (!d) return '';
+    const dd = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+    const dif = hoje ? diasEntre(hoje, iso) : null;
+    if (dif === 0) return 'hoje (' + dd + ')';
+    if (dif === 1) return 'amanhã (' + dd + ')';
+    return DIAS[d.getDay()] + ', ' + dd;
+  }
+  function horaFalada(h) {
+    if (!h) return '';
+    const [hh, mm] = h.split(':');
+    return Number(hh) + 'h' + (mm && mm !== '00' ? mm : '');
+  }
+  const COMO_PAGOU = { pix: 'no Pix', dinheiro: 'em dinheiro', debito: 'no cartão de débito', credito: 'no cartão de crédito', app: 'pelo aplicativo' };
+  function textoWhats(tipo, p, calc, cfg, opc) {
+    opc = opc || {};
+    const c = mesclarConfig(cfg);
+    const nome = String(p.clienteNome || '').trim().split(/\s+/)[0];
+    const quando = dataFalada(p.dataEntrega, opc.hoje) + (p.horaEntrega ? ', às ' + horaFalada(p.horaEntrega) : '');
+    const ondeTxt = p.tipoEntrega === 'entrega' ? 'Entrega ' + quando + (p.endereco ? '\nEndereço: ' + p.endereco : '') : 'Retirada ' + quando;
+    const itens = (p.itens || []).filter(it => numOk(it.qtd) && it.qtd > 0)
+      .map(it => '• ' + num(it.qtd) + 'x ' + (it.nome || 'Item') + ': ' + brl(it.qtd * (it.precoUnit || 0))).join('\n');
+    const contas = [];
+    if (calc.taxaEntrega > 0) contas.push('Taxa de entrega: ' + brl(calc.taxaEntrega));
+    if (calc.desconto > 0) contas.push('Desconto: -' + brl(calc.desconto));
+    contas.push('*Total: ' + brl(calc.total) + '*');
+    const assinatura = '\n\n' + (c.doceria.nome || 'Doce Astro') + (c.doceria.instagram ? '\n' + c.doceria.instagram : '');
+    const ola = 'Olá' + (nome ? ', ' + nome : '') + '!';
+    const saldo = calc.restante > 0.004 ? 'Falta ' + brl(calc.restante) + ', para pagar ' + (p.tipoEntrega === 'entrega' ? 'na entrega' : 'na retirada') + '.' : 'Pedido quitado.';
+    if (tipo === 'orcamento') {
+      return ola + ' Segue o orçamento:\n\n' + itens + '\n\n' + contas.join('\n') + '\n\n' + ondeTxt +
+        (calc.sinalSugerido > 0 && calc.pago < 0.005 ? '\n\nPara confirmar, o sinal é de ' + brl(calc.sinalSugerido) + ' (' + num(c.sinalPadraoPct) + '%).' : '') +
+        '\n\nQualquer dúvida, é só chamar.' + assinatura;
+    }
+    if (tipo === 'confirmacao') {
+      return ola + ' Seu pedido está confirmado.\n\n' + itens + '\n\n' + contas.join('\n') +
+        (calc.pago > 0.004 ? '\nRecebido: ' + brl(calc.pago) : '') + '\n' + saldo + '\n\n' + ondeTxt + '\n\nObrigada pela preferência!' + assinatura;
+    }
+    if (tipo === 'lembrete') {
+      return ola + ' Passando para lembrar do seu pedido: ' + (p.tipoEntrega === 'entrega' ? 'entrega ' : 'retirada ') + quando + '.' +
+        (p.tipoEntrega === 'entrega' && p.endereco ? '\nEndereço: ' + p.endereco : '') +
+        (calc.restante > 0.004 ? '\n\nFalta ' + brl(calc.restante) + ' para quitar.' : '') + assinatura;
+    }
+    // recibo
+    const ult = (p.pagamentos || []).slice(-1)[0];
+    return ola + (ult ? ' Recebemos ' + brl(ult.valor) + (ult.forma && COMO_PAGOU[ult.forma] ? ' ' + COMO_PAGOU[ult.forma] : '') + ' em ' + (ult.data ? ult.data.split('-').reverse().join('/') : '') + '.' : '') +
+      '\n\nPedido: ' + brl(calc.total) + '\nPago até agora: ' + brl(calc.pago) + '\n' + saldo + '\n\nObrigada!' + assinatura;
+  }
+
   const API = {
     UNIDADES, normUn, unidadesDaFamilia, paraBase, mesmaFamilia,
     numOk, lerNum, brl, num, pct,
     CONFIG_PADRAO, mesclarConfig, totalFixos, fixosPorHora, valorHora,
     markupParaMargem, margemParaMarkup, custoIngrediente,
-    calcularReceita, calcularVariacao, alvoDaReceita, receitasQueDependemDe, variacaoPreco
+    calcularReceita, calcularVariacao, alvoDaReceita, receitasQueDependemDe, variacaoPreco,
+    dataISO, paraData, somarDias, diasEntre, round2, FORMAS_PAGAMENTO, STATUS_PEDIDO, taxaFormaPct,
+    calcularPedido, necessidades, qtdLegivel, telefoneWhats, dataFalada, horaFalada, textoWhats
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else raiz.Calc = API;

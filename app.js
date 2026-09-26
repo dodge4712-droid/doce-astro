@@ -2,13 +2,13 @@
 (function () {
   'use strict';
   const C = window.Calc;
-  const VERSAO = '1.0.0';
-  const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config'];
+  const VERSAO = '2.0.0';
+  const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos'];
+  function dadosVazios() { const d = {}; TABELAS_LOCAIS.forEach(t => { d[t] = {}; }); return d; }
 
   // ================= Ícones =================
   const I = {
-    emblema: '<svg class="emb" viewBox="0 0 64 64" aria-hidden="true"><g class="orbita"><ellipse cx="32" cy="32" rx="27" ry="8.5" transform="rotate(-38 32 32)" fill="none" stroke="currentColor" stroke-width="2.2"/></g><path d="M32 3c1.3 18.5 3.3 25.6 20 29-16.7 3.4-18.7 10.5-20 29-1.3-18.5-3.3-25.6-20-29 16.7-3.4 18.7-10.5 20-29z" fill="currentColor"/><path d="M15 12c.4 4 .9 5.6 4.6 6.4-3.7.8-4.2 2.4-4.6 6.4-.4-4-.9-5.6-4.6-6.4 3.7-.8 4.2-2.4 4.6-6.4zM53 33c.3 3 .7 4.1 3.5 4.7-2.8.6-3.2 1.7-3.5 4.7-.3-3-.7-4.1-3.5-4.7 2.8-.6 3.2-1.7 3.5-4.7zM44 48c.2 1.7.4 2.3 2 2.7-1.6.4-1.8 1-2 2.7-.2-1.7-.4-2.3-2-2.7 1.6-.4 1.8-1 2-2.7z" fill="currentColor"/></svg>',
-    faisca: '<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 1c.6 5.6 1.5 7.6 8 9-6.5 1.4-7.4 3.4-8 9-.6-5.6-1.5-7.6-8-9 6.5-1.4 7.4-3.4 8-9z" fill="currentColor"/></svg>',
+    emblema: '<span class="selo-vazio" aria-hidden="true"><span class="logo-estrela"></span></span>',
     inicio: p('M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'),
     receitas: p('M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM9 8h6M9 12h6M9 16h3'),
     ingredientes: p('M8 3h8M9 3v3.5a5 5 0 0 1-1.6 3.6A6.5 6.5 0 0 0 5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4a6.5 6.5 0 0 0-2.4-4.9A5 5 0 0 1 15 6.5V3M6 15h12'),
@@ -30,7 +30,10 @@
     seta: p('M9 18l6-6-6-6'),
     baixar: p('M12 3v12M7 10l5 5 5-5M5 21h14'),
     enviar: p('M12 21V9M7 14l5-5 5 5M5 3h14'),
-    receitaDentro: p('M4 7h16M4 12h10M4 17h7M17 14l3 3-3 3')
+    receitaDentro: p('M4 7h16M4 12h10M4 17h7M17 14l3 3-3 3'),
+    pedidos: p('M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1zM8 6H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2M9 12l2 2 4-4'),
+    clientes: p('M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 20v-1a4 4 0 0 0-3-3.9M15.5 4.2a3.5 3.5 0 0 1 0 6.6'),
+    mensagem: p('M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z')
   };
   function p(d) { return '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + d + '"/></svg>'; }
 
@@ -86,7 +89,7 @@
 
   // ================= Estado =================
   const S = {
-    dados: { ingredientes: {}, receitas: {}, config: {} },
+    dados: dadosVazios(),
     fila: [],
     meta: { modo: null, url: '', pin: '', ultimaSync: '', conflitos: [], tema: 'auto', fonte: 1 },
     sync: { estado: 'demo', msg: '', rodando: false },
@@ -208,7 +211,7 @@
         S.sync.estado = 'ok'; S.sync.msg = '';
         salvarLocal();
         if ((resp.conflitos || []).length) toast((resp.conflitos.length === 1 ? 'Um registro foi alterado em dois aparelhos.' : resp.conflitos.length + ' registros foram alterados em dois aparelhos.') + ' Confira a versão que ficou de fora.', 'Ver', () => ir('#/ajustes'));
-        if (mudouAlgo && !(S.editor && S.editor.sujo)) render(false);
+        if (mudouAlgo && !(S.editor && S.editor.sujo)) { S.editor = null; render(false); }
         if (S.fila.length) agendarSync(1000);
       }
     } catch (e) {
@@ -235,6 +238,7 @@
     const el = $('#pilula-sync'); if (!el) return;
     const s = textoSync();
     el.dataset.estado = s.e; el.innerHTML = s.i + '<span>' + esc(s.t) + '</span>';
+    if (typeof atualizarEstadoAjustes === 'function') atualizarEstadoAjustes();
     el.title = S.sync.msg || s.t;
   }
 
@@ -289,8 +293,9 @@
   // ================= Navegação =================
   const NAV = [
     { h: '#/inicio', t: 'Início', i: I.inicio },
+    { h: '#/pedidos', t: 'Pedidos', i: I.pedidos },
     { h: '#/receitas', t: 'Receitas', i: I.receitas },
-    { h: '#/ingredientes', t: 'Ingredientes', i: I.ingredientes },
+    { h: '#/clientes', t: 'Clientes', i: I.clientes },
     { h: '#/ajustes', t: 'Ajustes', i: I.ajustes }
   ];
   function ir(h) { location.hash = h; }
@@ -300,7 +305,7 @@
     if (S.editor && S.editor.sujo) {
       const alvo = location.hash;
       ignorarHash = true; location.hash = hashAnterior;
-      const ok = await confirmar('Sair sem salvar?', 'As alterações desta receita ainda não foram salvas.', 'Descartar alterações', true);
+      const ok = await confirmar('Sair sem salvar?', 'As alterações ainda não foram salvas.', 'Descartar alterações', true);
       if (!ok) return;
       S.editor = null; ignorarHash = false; location.hash = alvo; return;
     }
@@ -309,19 +314,21 @@
   window.addEventListener('beforeunload', function (e) { if (S.editor && S.editor.sujo) { e.preventDefault(); e.returnValue = ''; } });
 
   function secaoAtiva(h) {
-    if (h.startsWith('#/receita')) return '#/receitas';
-    return NAV.some(n => n.h === h) ? h : '#/inicio';
+    const r = h.split('?')[0];
+    if (r.startsWith('#/receita') || r === '#/ingredientes') return '#/receitas';
+    if (r.startsWith('#/pedido') || ['#/agenda', '#/producao', '#/compras'].includes(r)) return '#/pedidos';
+    if (r.startsWith('#/cliente')) return '#/clientes';
+    return NAV.some(n => n.h === r) ? r : '#/inicio';
   }
 
   function casca(conteudo) {
     const ativa = secaoAtiva(location.hash || '#/inicio');
     const links = NAV.map(n => '<a href="' + n.h + '"' + (n.h === ativa ? ' aria-current="page"' : '') + '>' + n.i + '<span>' + n.t + '</span></a>').join('');
     return '<div class="app">' +
-      '<aside class="lateral"><div class="marca-lat">' + I.emblema + '<div class="nome">Doce Astro</div><div class="sub">doces artesanais</div>' +
-      '<span class="faisca" style="top:8px;left:14px">' + I.faisca + '</span><span class="faisca" style="top:52px;right:10px">' + I.faisca + '</span></div>' +
+      '<aside class="lateral"><a class="marca-lat" href="#/inicio"><span class="logo-selo" role="img" aria-label="Doce Astro, doces artesanais"></span></a>' +
       '<nav aria-label="Seções">' + links + '</nav>' +
-      '<div class="rodape-lat">Espaço Nave ' + VERSAO + '<br>Pedidos, estoque e caixa chegam nas próximas etapas.</div></aside>' +
-      '<div class="principal-col"><header class="topo"><a class="marca" href="#/inicio"><span class="emblema">' + I.emblema + '</span><b>Doce Astro</b></a><span class="espaco"></span>' +
+      '<div class="rodape-lat">Espaço Nave ' + VERSAO + '<br>Estoque, caixa e relatórios chegam nas próximas etapas.</div></aside>' +
+      '<div class="principal-col"><header class="topo"><a class="marca" href="#/inicio"><span class="emblema"><span class="logo-estrela"></span></span><b>Doce Astro</b></a><span class="espaco"></span>' +
       '<button type="button" class="pilula-sync" id="pilula-sync" data-acao="pilula"></button>' +
       '<a class="btn-icone" href="#/ajustes" aria-label="Ajustes">' + I.ajustes + '</a></header>' +
       '<main class="conteudo" id="conteudo">' + conteudo + '</main></div>' +
@@ -331,16 +338,30 @@
   function render(trocouRota) {
     const h = location.hash || '#/inicio';
     const mudou = trocouRota || h !== S.rota;
+    // Ao trocar de tela (inclusive pelo botão Voltar), nenhuma janela fica aberta por cima
+    if (h !== S.rota) $$('dialog.folha[open]').forEach(d => d.close());
     const y = window.scrollY;
     const raiz = $('#raiz');
     if (!S.meta.modo) { raiz.innerHTML = telaBoasVindas(); S.rota = h; return; }
     let html;
-    const partes = h.replace(/^#\//, '').split('/');
-    if (partes[0] !== 'receita') S.editor = null;
+    const [caminho, busca] = h.replace(/^#\//, '').split('?');
+    const partes = caminho.split('/');
+    const q = new URLSearchParams(busca || '');
+    const tipoEditor = { receita: 'receita', pedido: 'pedido' }[partes[0]];
+    if (!S.editor || S.editor.tipo !== tipoEditor) S.editor = null;
     switch (partes[0]) {
       case 'receitas': html = telaReceitas(); break;
       case 'receita': html = telaEditorReceita(decodeURIComponent(partes[1] || 'nova')); break;
       case 'ingredientes': html = telaIngredientes(); break;
+      case 'pedidos': html = telaPedidos(q); break;
+      case 'pedido': html = telaEditorPedido(decodeURIComponent(partes[1] || 'novo'), q); break;
+      case 'agenda': html = telaAgenda(); break;
+      case 'producao': html = telaProducao(); break;
+      case 'compras':
+        if (q.get('de') && q.get('ate')) S.compras = Object.assign(S.compras || { orc: false }, { de: q.get('de'), ate: q.get('ate') });
+        html = telaCompras(); break;
+      case 'clientes': html = telaClientes(); break;
+      case 'cliente': html = telaCliente(decodeURIComponent(partes[1] || '')); break;
       case 'ajustes': html = telaAjustes(); break;
       default: html = telaInicio();
     }
@@ -351,15 +372,16 @@
     if (partes[0] === 'receita') montarEditor();
     if (partes[0] === 'ingredientes') montarFiltroIngredientes();
     if (partes[0] === 'receitas') montarFiltroReceitas();
+    if (partes[0] === 'pedido') montarEditorPedido();
+    if (partes[0] === 'pedidos') montarFiltroPedidos();
+    if (partes[0] === 'clientes') montarFiltroClientes();
   }
 
   // ================= Boas-vindas =================
   function telaBoasVindas() {
     return '<div class="boas-vindas"><div class="bv-caixa">' +
-      '<div class="bv-hero">' + I.emblema +
-      '<span class="faisca" style="top:24px;left:28px">' + I.faisca + '</span><span class="faisca" style="bottom:30px;right:36px">' + I.faisca + '</span>' +
-      '<div class="nome">Doce Astro</div><div class="sub">doces artesanais</div>' +
-      '<p class="frase">Espaço Nave: receitas, custos e preços da doceria num lugar só.</p></div>' +
+      '<div class="bv-hero"><span class="logo-selo" role="img" aria-label="Doce Astro, doces artesanais"></span>' +
+      '<p class="frase">Espaço Nave: pedidos, receitas e preços da doceria num lugar só.</p></div>' +
       '<div class="grade">' +
       '<form class="bloco" id="form-conectar"><h2>Conectar à planilha</h2><p class="explica">Os dados ficam na sua Planilha do Google e aparecem iguais no celular e no computador. O guia de instalação explica como conseguir o endereço.</p>' +
       '<label class="campo"><span>Endereço do app da planilha</span><input class="entrada" name="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" required></label>' +
@@ -415,11 +437,13 @@
     const cf = cfg();
     const pend = lista('ingredientes').filter(i => i.obs);
     const altas = lista('ingredientes').map(i => ({ i: i, v: C.variacaoPreco(i, 90) })).filter(x => x.v && x.v.variacao > 0.05).sort((x, y) => y.v.variacao - x.v.variacao).slice(0, 5);
-    let h = '<div class="cab-pagina"><div class="titulos"><h1>Início</h1><p class="sub">' + esc(hoje.charAt(0).toUpperCase() + hoje.slice(1)) + '</p></div></div>';
+    let h = '<div class="cab-pagina"><div class="titulos"><h1>Início</h1><p class="sub">' + esc(hoje.charAt(0).toUpperCase() + hoje.slice(1)) + '</p></div><div class="acoes"><a class="btn" href="#/pedido/novo">' + I.mais + 'Novo pedido</a></div></div>';
 
     if (S.meta.conflitos.length) {
       h += '<div class="aviso neg" style="margin-bottom:16px">' + I.alerta + '<div class="txt"><b>' + (S.meta.conflitos.length === 1 ? 'Um registro foi alterado em dois aparelhos ao mesmo tempo.' : S.meta.conflitos.length + ' registros foram alterados em dois aparelhos ao mesmo tempo.') + '</b> Ficou a versão mais recente. <a href="#/ajustes#conflitos">Ver a versão que ficou de fora</a></div></div>';
     }
+
+    h += blocosPedidosInicio();
 
     if (!nRec) {
       h += '<div class="bloco vazio">' + I.emblema + '<h2>Cadastre sua primeira receita</h2><p>Com a receita cadastrada, o app calcula o custo de cada doce, sugere o preço e avisa quando algum produto dá prejuízo.</p><a class="btn" href="#/receita/nova">' + I.mais + 'Nova receita</a></div>';
@@ -462,7 +486,7 @@
   function telaIngredientes() {
     const ings = lista('ingredientes').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     let h = '<div class="cab-pagina"><div class="titulos"><h1>Ingredientes</h1><p class="sub">Cadastre uma vez e use em todas as receitas. Quando o preço muda, as receitas se atualizam.</p></div>' +
-      '<div class="acoes"><button type="button" class="btn" data-acao="novo-ing">' + I.mais + 'Novo ingrediente</button></div></div>';
+      '<div class="acoes"><button type="button" class="btn" data-acao="novo-ing">' + I.mais + 'Novo ingrediente</button></div></div>' + abas(ABAS_REC, '#/ingredientes');
     if (!ings.length) {
       return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhum ingrediente ainda</h2><p>' + (S.meta.modo === 'planilha' ? 'Comece pelo que você mais compra: leite condensado, chocolate, creme de leite.' : 'Importe o arquivo ingredientes-iniciais.json, que veio no pacote, para testar com a sua lista de 30 ingredientes. Ou cadastre um por um.') + '</p><div class="acoes" style="justify-content:center">' + (S.meta.modo !== 'planilha' ? '<label class="btn" style="cursor:pointer">' + I.enviar + 'Importar lista<input type="file" accept="application/json,.json" id="importar" hidden></label>' : '') + '<button type="button" class="btn' + (S.meta.modo !== 'planilha' ? ' sec' : '') + '" data-acao="novo-ing">' + I.mais + 'Cadastrar ingrediente</button></div></div>';
     }
@@ -622,7 +646,7 @@
 
   function telaReceitas() {
     const recs = lista('receitas').sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
-    let h = '<div class="cab-pagina"><div class="titulos"><h1>Receitas</h1><p class="sub">Custo, preço sugerido e lucro de cada doce.</p></div><div class="acoes"><a class="btn" href="#/receita/nova">' + I.mais + 'Nova receita</a></div></div>';
+    let h = '<div class="cab-pagina"><div class="titulos"><h1>Receitas</h1><p class="sub">Custo, preço sugerido e lucro de cada doce.</p></div><div class="acoes"><a class="btn" href="#/receita/nova">' + I.mais + 'Nova receita</a></div></div>' + abas(ABAS_REC, '#/receitas');
     if (!recs.length) {
       return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhuma receita ainda</h2><p>Cadastre a receita com os ingredientes e quanto ela rende. O app calcula o resto.</p><a class="btn" href="#/receita/nova">' + I.mais + 'Nova receita</a></div>';
     }
@@ -658,12 +682,12 @@
 
   // ---------- Editor de receita ----------
   function telaEditorReceita(id) {
-    if (!S.editor || S.editor.idRota !== id) {
+    if (!S.editor || S.editor.tipo !== 'receita' || S.editor.idRota !== id) {
       let d;
       if (id === 'nova') d = novaReceitaBase();
       else if (S.dados.receitas[id] && !S.dados.receitas[id].excluidoEm) d = clone(S.dados.receitas[id]);
       else return '<div class="bloco vazio">' + I.emblema + '<h2>Receita não encontrada</h2><p>Ela pode ter sido excluída em outro aparelho.</p><a class="btn" href="#/receitas">Ver receitas</a></div>';
-      S.editor = { idRota: id, nova: id === 'nova', d: d, sujo: false };
+      S.editor = { tipo: 'receita', idRota: id, nova: id === 'nova', d: d, sujo: false };
     }
     return htmlEditor();
   }
@@ -756,7 +780,7 @@
     h += '<section class="bloco"><h2>Anotações</h2><label class="campo"><span class="sr">Anotações</span><textarea class="entrada" data-c="obs" placeholder="Modo de preparo, dicas, fornecedor…">' + esc(r.obs) + '</textarea></label></section>';
 
     h += '<div class="barra-salvar"><span class="estado" id="estado-ed">' + (e.sujo ? 'Alterações não salvas' : (e.nova ? 'Receita nova' : 'Tudo salvo')) + '</span>' +
-      (!e.nova ? '<button type="button" class="btn perigo fino" data-acao="excluir-rec">' + I.lixo + '<span>Excluir</span></button><button type="button" class="btn sec fino" data-acao="duplicar-rec">' + I.copiar + '<span>Duplicar</span></button>' : '') +
+      (!e.nova ? '<button type="button" class="btn perigo fino" data-acao="excluir-rec" aria-label="Excluir receita" title="Excluir receita">' + I.lixo + '<span>Excluir</span></button><button type="button" class="btn sec fino" data-acao="duplicar-rec" aria-label="Duplicar receita" title="Duplicar receita">' + I.copiar + '<span>Duplicar</span></button>' : '') +
       '<button type="button" class="btn" data-acao="salvar-rec">Salvar receita</button></div>';
 
     h += '</div><aside class="painel"><div class="bloco" id="resumo" aria-live="polite"></div></aside></div>';
@@ -913,12 +937,642 @@
     r.nome = r.nome.trim();
     gravarRegistro('receitas', clone(r));
     const eraNova = e.nova;
-    S.editor = { idRota: r.id, nova: false, d: clone(r), sujo: false };
+    S.editor = { tipo: 'receita', idRota: r.id, nova: false, d: clone(r), sujo: false };
     toast('Receita salva.');
     if (eraNova) { ignorarHash = true; location.hash = '#/receita/' + encodeURIComponent(r.id); }
     render(false);
     return true;
   }
+
+  // ================= Etapa 2: pedidos, clientes, agenda, produção e compras =================
+  const ATIVOS = ['orcamento', 'confirmado', 'producao', 'pronto'];
+  const ABAS_PED = [['#/pedidos', 'Pedidos'], ['#/agenda', 'Agenda'], ['#/producao', 'Produção'], ['#/compras', 'Compras']];
+  const ABAS_REC = [['#/receitas', 'Receitas'], ['#/ingredientes', 'Ingredientes']];
+  const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  function hoje() { return C.dataISO(); }
+  function dataDia(iso) { const d = C.paraData(iso); return d ? iso.split('-').reverse().join('/') : '—'; }
+  function dataCurta(iso) {
+    const d = C.paraData(iso); if (!d) return 'sem data';
+    const dif = C.diasEntre(hoje(), iso);
+    const dm = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+    if (dif === 0) return 'hoje, ' + dm;
+    if (dif === 1) return 'amanhã, ' + dm;
+    if (dif === -1) return 'ontem, ' + dm;
+    return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()] + ', ' + dm;
+  }
+  function aniversarioTxt(a) { if (!a) return ''; const [m, d] = a.split('-'); return d + ' de ' + MESES[Number(m) - 1]; }
+  function nomeCliente(p) { const c = p.clienteId && S.dados.clientes[p.clienteId]; return (c && c.nome) || p.clienteNome || 'Sem cliente'; }
+  function calcPed(p) { return C.calcularPedido(p, ctxCalc()); }
+  function quandoTxt(p) { return (p.tipoEntrega === 'entrega' ? 'Entrega ' : 'Retirada ') + dataCurta(p.dataEntrega) + (p.horaEntrega ? ' às ' + C.horaFalada(p.horaEntrega) : ''); }
+  function rotForma(f) { return C.FORMAS_PAGAMENTO[f] ? C.FORMAS_PAGAMENTO[f].rotulo : ''; }
+  function abas(lst, ativo) { return '<nav class="abas" aria-label="Partes desta seção">' + lst.map(a => '<a href="' + a[0] + '"' + (a[0] === ativo ? ' aria-current="page"' : '') + '>' + a[1] + '</a>').join('') + '</nav>'; }
+  function cab(titulo, sub, acoes) {
+    return '<div class="cab-pagina"><div class="titulos"><h1>' + titulo + '</h1>' + (sub ? '<p class="sub">' + sub + '</p>' : '') + '</div>' + (acoes ? '<div class="acoes">' + acoes + '</div>' : '') + '</div>';
+  }
+  function chipStatus(s) {
+    const cls = { orcamento: 'tracejado', producao: 'alerta', pronto: 'pos', entregue: 'mudo', cancelado: 'neg' }[s] || '';
+    return '<span class="chip ' + cls + '">' + esc(C.STATUS_PEDIDO[s] ? C.STATUS_PEDIDO[s].rotulo : s) + '</span>';
+  }
+  function chipPagamento(c, p) {
+    if (p.status === 'cancelado' || p.status === 'orcamento') return '';
+    if (c.situacao === 'pago') return '<span class="chip pos">' + I.ok + 'pago</span>';
+    if (c.situacao === 'parcial') return '<span class="chip alerta">pago em parte</span>';
+    if (c.situacao === 'excedente') return '<span class="chip alerta">pago a mais</span>';
+    return '<span class="chip">nada pago</span>';
+  }
+  function ordemData(a, b) { return String(a.dataEntrega || '9').localeCompare(String(b.dataEntrega || '9')) || String(a.horaEntrega || '99').localeCompare(String(b.horaEntrega || '99')); }
+  function cardPedido(p) {
+    const c = calcPed(p);
+    const atrasado = ['confirmado', 'producao', 'pronto'].includes(p.status) && p.dataEntrega && p.dataEntrega < hoje();
+    const its = p.itens || [];
+    const resumo = its.slice(0, 2).map(it => C.num(it.qtd) + 'x ' + (it.nome || 'Item')).join(', ') + (its.length > 2 ? ' e mais ' + (its.length - 2) : '');
+    return '<a class="item" href="#/pedido/' + encodeURIComponent(p.id) + '" data-busca="' + esc(normBusca(nomeCliente(p))) + '">' +
+      '<div class="principal"><div class="nome">' + esc(nomeCliente(p)) + '</div><div class="det">' + esc(quandoTxt(p)) + '</div><div class="det">' + esc(resumo) + '</div></div>' +
+      '<div class="valor">' + C.brl(c.total) + (c.restante > 0.004 && !['cancelado', 'orcamento'].includes(p.status) ? '<small>falta ' + C.brl(c.restante) + '</small>' : '') + '</div>' +
+      '<div class="chips">' + chipStatus(p.status) + (atrasado ? '<span class="chip neg">' + I.alerta + 'data já passou</span>' : '') + chipPagamento(c, p) + '</div></a>';
+  }
+  function listaAgrupada(peds) {
+    let h = '', ultimo = null;
+    peds.forEach(function (p) {
+      if (p.dataEntrega !== ultimo) { ultimo = p.dataEntrega; h += '<h3 class="grupo-data">' + esc(dataCurta(p.dataEntrega)) + '</h3>'; }
+      h += cardPedido(p);
+    });
+    return h;
+  }
+  async function copiarTexto(txt) {
+    try { await navigator.clipboard.writeText(txt); toast('Texto copiado.'); return; } catch (e) { /* tenta o jeito antigo */ }
+    const t = document.createElement('textarea'); t.value = txt; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select();
+    try { document.execCommand('copy'); toast('Texto copiado.'); } catch (e) { toast('Não foi possível copiar. Selecione o texto e copie à mão.'); }
+    t.remove();
+  }
+
+  // ---------- Lista de pedidos ----------
+  const FILTROS_PED = [
+    ['ativos', 'Em aberto', p => ATIVOS.includes(p.status)],
+    ['orcamento', 'Orçamentos', p => p.status === 'orcamento'],
+    ['receber', 'A receber', p => !['cancelado', 'orcamento'].includes(p.status) && calcPed(p).restante > 0.004],
+    ['entregues', 'Entregues', p => p.status === 'entregue'],
+    ['cancelados', 'Cancelados', p => p.status === 'cancelado'],
+    ['todos', 'Todos', () => true]
+  ];
+  function telaPedidos(q) {
+    const f = FILTROS_PED.find(x => x[0] === q.get('f')) || FILTROS_PED[0];
+    const todos = lista('pedidos');
+    let h = cab('Pedidos', 'Encomendas, orçamentos e o que falta receber.', '<a class="btn" href="#/pedido/novo">' + I.mais + 'Novo pedido</a>') + abas(ABAS_PED, '#/pedidos');
+    if (!todos.length) {
+      return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhum pedido ainda</h2><p>Registre orçamentos e encomendas. O app monta a agenda, a lista de produção e a lista de compras a partir deles.</p><a class="btn" href="#/pedido/novo">' + I.mais + 'Novo pedido</a></div>';
+    }
+    const futuros = ['ativos', 'orcamento', 'receber'].includes(f[0]);
+    const lst = todos.filter(f[2]).sort(futuros ? ordemData : (a, b) => ordemData(b, a));
+    h += '<div class="seg rolavel" role="group" aria-label="Filtrar pedidos" style="margin-bottom:12px">' + FILTROS_PED.map(x => '<a href="#/pedidos?f=' + x[0] + '" aria-pressed="' + (x === f) + '">' + x[1] + '</a>').join('') + '</div>';
+    h += '<div class="linha-campos" style="margin-bottom:14px"><label class="busca"><span class="sr">Buscar por cliente</span>' + I.busca + '<input class="entrada" id="busca-ped" type="search" placeholder="Buscar por cliente"></label></div>';
+    if (!lst.length) return h + '<p class="mudo" style="padding:16px 4px">Nenhum pedido neste filtro.</p>';
+    if (f[0] === 'receber') {
+      const tot = lst.reduce((s, p) => s + calcPed(p).restante, 0);
+      h += '<div class="aviso" style="margin-bottom:12px">' + I.alerta + '<div class="txt">Falta receber <b>' + C.brl(tot) + '</b> em ' + lst.length + (lst.length === 1 ? ' pedido.' : ' pedidos.') + '</div></div>';
+    }
+    h += '<div class="lista" id="lista-ped">' + (futuros ? listaAgrupada(lst) : lst.map(cardPedido).join('')) + '</div><p class="mudo" id="sem-res-ped" hidden style="padding:16px">Nenhum pedido desse cliente neste filtro.</p>';
+    return h;
+  }
+  function montarFiltroPedidos() {
+    const b = $('#busca-ped'); if (!b) return;
+    b.addEventListener('input', function () {
+      const q = normBusca(b.value); let n = 0;
+      $$('#lista-ped .item').forEach(el => { const v = !q || el.dataset.busca.includes(q); el.hidden = !v; if (v) n++; });
+      $$('#lista-ped .grupo-data').forEach(g => { let el = g.nextElementSibling, vis = false; while (el && !el.classList.contains('grupo-data')) { if (!el.hidden) vis = true; el = el.nextElementSibling; } g.hidden = !vis; });
+      $('#sem-res-ped').hidden = n > 0;
+    });
+  }
+
+  // ---------- Editor de pedido ----------
+  function novoPedidoBase(q) {
+    const cf = cfg();
+    const p = {
+      id: uid(), clienteId: '', clienteNome: '', status: 'orcamento', tipoEntrega: 'retirada',
+      dataEntrega: '', horaEntrega: '', endereco: '', taxaEntrega: cf.taxas.entrega,
+      itens: [], desconto: null, formaPagamento: 'pix', pagamentos: [], obs: '', historicoStatus: []
+    };
+    const cli = q && q.get('cliente') && S.dados.clientes[q.get('cliente')];
+    if (cli && !cli.excluidoEm) { p.clienteId = cli.id; p.clienteNome = cli.nome; p.endereco = cli.endereco || ''; }
+    if (q && /^\d{4}-\d{2}-\d{2}$/.test(q.get('data') || '')) p.dataEntrega = q.get('data');
+    return p;
+  }
+  function telaEditorPedido(id, q) {
+    if (!S.editor || S.editor.tipo !== 'pedido' || S.editor.idRota !== id) {
+      let d;
+      if (id === 'novo') d = novoPedidoBase(q);
+      else if (S.dados.pedidos[id] && !S.dados.pedidos[id].excluidoEm) d = clone(S.dados.pedidos[id]);
+      else return '<div class="bloco vazio">' + I.emblema + '<h2>Pedido não encontrado</h2><p>Ele pode ter sido excluído em outro aparelho.</p><a class="btn" href="#/pedidos">Ver pedidos</a></div>';
+      d.itens = d.itens || []; d.pagamentos = d.pagamentos || [];
+      S.editor = { tipo: 'pedido', idRota: id, nova: id === 'novo', d: d, sujo: false };
+    }
+    return htmlEditorPedido();
+  }
+  function htmlEditorPedido() {
+    const e = S.editor, p = e.d;
+    const cli = p.clienteId ? S.dados.clientes[p.clienteId] : null;
+    let h = '<div class="cab-pagina"><div class="titulos"><a href="#/pedidos" class="link-btn voltar">' + I.voltar + 'Pedidos</a><h1>' + (e.nova ? 'Novo pedido' : 'Pedido de ' + esc(nomeCliente(p))) + '</h1>' +
+      (!e.nova ? '<p class="sub">Registrado em ' + dataHoraBR(p.criadoEm) + '</p>' : '') + '</div></div>';
+    h += '<div class="editor"><div class="form-ped">';
+
+    h += '<section class="bloco"><h2>Cliente</h2>' + (cli
+      ? '<div class="linha-cliente"><div class="principal"><div class="nome">' + esc(cli.nome) + '</div><div class="det">' + esc(cli.telefone || 'sem telefone') + '</div>' + (cli.obs ? '<div class="aviso" style="margin-top:8px">' + I.alerta + '<div class="txt">' + esc(cli.obs) + '</div></div>' : '') + '</div><div class="acoes"><a class="btn sec fino" href="#/cliente/' + encodeURIComponent(cli.id) + '">Ver ficha</a><button type="button" class="btn sec fino" data-acao="escolher-cliente">Trocar</button></div></div>'
+      : '<button type="button" class="btn" data-acao="escolher-cliente">' + I.clientes + 'Escolher cliente</button>') + '</section>';
+
+    h += '<section class="bloco"><h2>Situação</h2>' + (p.status === 'cancelado'
+      ? '<div class="aviso neg">' + I.alerta + '<div class="txt">Pedido cancelado. Ele não entra na agenda, na produção nem nas compras. <button type="button" class="link-btn" data-acao="reabrir-ped">Reabrir pedido</button></div></div>'
+      : '<div class="seg rolavel" role="group" aria-label="Situação do pedido">' + ['orcamento', 'confirmado', 'producao', 'pronto', 'entregue'].map(s => '<button type="button" data-acao="status-ped" data-v="' + s + '" aria-pressed="' + (p.status === s) + '">' + C.STATUS_PEDIDO[s].rotulo + '</button>').join('') + '</div>') + '</section>';
+
+    h += '<section class="bloco"><h2>Retirada ou entrega</h2><div class="seg" role="group" aria-label="Como o cliente recebe"><button type="button" data-acao="tipo-ent" data-v="retirada" aria-pressed="' + (p.tipoEntrega !== 'entrega') + '">Retirada</button><button type="button" data-acao="tipo-ent" data-v="entrega" aria-pressed="' + (p.tipoEntrega === 'entrega') + '">Entrega</button></div>' +
+      '<div class="grade" style="margin-top:14px"><label class="campo"><span>Data</span><input class="entrada" type="date" data-c="dataEntrega" value="' + esc(p.dataEntrega || '') + '"></label>' +
+      '<label class="campo"><span>Horário</span><input class="entrada" type="time" data-c="horaEntrega" value="' + esc(p.horaEntrega || '') + '"></label>' +
+      (p.tipoEntrega === 'entrega' ? '<label class="campo"><span>Endereço</span><input class="entrada" data-c="endereco" value="' + esc(p.endereco || '') + '" placeholder="Rua, número, bairro"></label>' +
+        '<label class="campo"><span>Taxa de entrega</span><span class="com-prefixo"><i>R$</i><input class="entrada num" data-c="taxaEntrega" data-n inputmode="decimal" value="' + inNum(p.taxaEntrega) + '"></span><small>Cobrada do cliente. Não conta como lucro.</small></label>' : '') + '</div></section>';
+
+    h += '<section class="bloco"><h2>Produtos</h2><div class="linhas-edit">' + (p.itens.length ? p.itens.map(function (it, i) {
+      return '<div class="linha-edit linha-ped">' +
+        (it.tipo === 'avulso'
+          ? '<label class="campo nome-av"><span>Item avulso</span><input class="entrada" data-c="itens.' + i + '.nome" value="' + esc(it.nome || '') + '" placeholder="Ex.: vela, topo de bolo"></label>'
+          : '<div class="nome-it"><span>' + esc(it.nome) + '</span></div>') +
+        '<label class="campo"><span>Quantidade</span><input class="entrada num" data-c="itens.' + i + '.qtd" data-n inputmode="decimal" value="' + inNum(it.qtd) + '"></label>' +
+        '<label class="campo"><span>Preço unitário</span><span class="com-prefixo"><i>R$</i><input class="entrada num" data-c="itens.' + i + '.precoUnit" data-n inputmode="decimal" value="' + inNum(it.precoUnit) + '"></span></label>' +
+        (it.tipo === 'avulso' ? '<label class="campo"><span>Custo unitário</span><span class="com-prefixo"><i>R$</i><input class="entrada num" data-c="itens.' + i + '.custoUnit" data-n inputmode="decimal" value="' + inNum(it.custoUnit) + '" placeholder="opcional"></span></label>' : '') +
+        '<div class="tot-it"><span class="mudo">Total</span><b data-ped-item="' + i + '"></b></div>' +
+        '<button type="button" class="btn-icone" data-acao="rem-item-ped" data-i="' + i + '" aria-label="Remover ' + esc(it.nome || 'item') + '">' + I.lixo + '</button></div>';
+    }).join('') : '<p class="mudo">Nenhum produto ainda.</p>') +
+      '</div><div class="acoes" style="margin-top:12px"><button type="button" class="btn sec" data-acao="add-produto">' + I.mais + 'Adicionar produto</button><button type="button" class="btn sec" data-acao="add-avulso">' + I.mais + 'Item avulso</button></div>' +
+      '<div class="grade" style="margin-top:14px"><label class="campo"><span>Desconto</span><span class="com-prefixo"><i>R$</i><input class="entrada num" data-c="desconto" data-n inputmode="decimal" value="' + inNum(p.desconto) + '" placeholder="0,00"></span></label></div></section>';
+
+    h += '<section class="bloco"><h2>Pagamento</h2><label class="campo"><span>Forma combinada</span><select class="entrada" data-c="formaPagamento">' +
+      Object.keys(C.FORMAS_PAGAMENTO).map(k => '<option value="' + k + '"' + (p.formaPagamento === k ? ' selected' : '') + '>' + C.FORMAS_PAGAMENTO[k].rotulo + '</option>').join('') +
+      '</select><small>Cartão e aplicativo têm taxa; ela sai do lucro estimado.</small></label>' +
+      '<h3 style="margin-top:18px">Recebido</h3>' + (p.pagamentos.length
+        ? '<ul class="historico">' + p.pagamentos.map((x, i) => '<li><span>' + dataDia(x.data) + ', ' + esc(rotForma(x.forma)) + (x.obs ? ' (' + esc(x.obs) + ')' : '') + '</span><span><b>' + C.brl(x.valor) + '</b><button type="button" class="link-btn mini" data-acao="rem-pag" data-i="' + i + '" aria-label="Remover pagamento de ' + C.brl(x.valor) + '">remover</button></span></li>').join('') + '</ul>'
+        : '<p class="mudo">Nada recebido ainda.</p>') +
+      '<div class="acoes" style="margin-top:12px" id="botoes-pag"></div></section>';
+
+    h += '<section class="bloco"><h2>Observações</h2><label class="campo"><span class="sr">Observações</span><textarea class="entrada" data-c="obs" placeholder="Tema da festa, cores, sem lactose, mensagem no cartão…">' + esc(p.obs || '') + '</textarea></label></section>';
+
+    h += '<div class="barra-salvar"><span class="estado" id="estado-ped"></span>' +
+      (!e.nova ? '<button type="button" class="btn perigo fino" data-acao="excluir-ped" aria-label="Excluir pedido" title="Excluir pedido">' + I.lixo + '<span>Excluir</span></button>' : '') +
+      (!e.nova && p.status !== 'cancelado' ? '<button type="button" class="btn sec fino" data-acao="cancelar-ped" aria-label="Cancelar pedido" title="Cancelar pedido">' + I.fechar + '<span>Cancelar pedido</span></button>' : '') +
+      '<button type="button" class="btn" data-acao="salvar-ped">Salvar pedido</button></div>';
+    h += '</div><aside class="painel"><div class="bloco" id="resumo-ped" aria-live="polite"></div></aside></div>';
+    return h;
+  }
+  function montarEditorPedido() {
+    const cont = $('.form-ped'); if (!cont || !S.editor) return;
+    cont.addEventListener('input', aoEditarPedido);
+    cont.addEventListener('change', aoEditarPedido);
+    recalcPedido();
+  }
+  function aoEditarPedido(ev) {
+    const el = ev.target, e = S.editor; if (!e || e.tipo !== 'pedido') return;
+    const cam = el.dataset.c; if (!cam) return;
+    const porChange = el.tagName === 'SELECT' || el.type === 'date' || el.type === 'time';
+    if (porChange ? ev.type !== 'change' : ev.type !== 'input') return;
+    gravarCaminho(e.d, cam, el.hasAttribute('data-n') ? C.lerNum(el.value) : el.value);
+    marcarSujo(); recalcPedido();
+  }
+  function recalcPedido() {
+    const e = S.editor; if (!e || e.tipo !== 'pedido') return;
+    const p = e.d, c = calcPed(p);
+    c.itens.forEach((it, i) => { const el = $('[data-ped-item="' + i + '"]'); if (el) el.textContent = C.brl(it.total); });
+    const est = $('#estado-ped');
+    if (est) est.innerHTML = '<b style="color:var(--ink)">' + C.brl(c.total) + '</b>' + (c.restante > 0.004 ? ', falta ' + C.brl(c.restante) : '') + '<br>' + (e.sujo ? 'Alterações não salvas' : (e.nova ? 'Pedido novo' : 'Tudo salvo'));
+    const bp = $('#botoes-pag');
+    if (bp) bp.innerHTML = (c.pago < 0.005 && c.sinalSugerido > 0 && c.restante > 0.004 ? '<button type="button" class="btn sec" data-acao="pagar" data-v="sinal">Registrar sinal de ' + C.brl(c.sinalSugerido) + '</button>' : '') +
+      (c.restante > 0.004 ? '<button type="button" class="btn sec" data-acao="pagar" data-v="restante">Registrar pagamento</button>' : '');
+    const res = $('#resumo-ped'); if (!res) return;
+    const li = (r, v) => '<li><span>' + r + '</span><span>' + v + '</span></li>';
+    res.innerHTML = '<h2>Resumo</h2><ul class="decomp">' + li('Produtos', C.brl(c.subtotal)) +
+      (c.taxaEntrega ? li('Entrega', C.brl(c.taxaEntrega)) : '') + (c.desconto ? li('Desconto', '-' + C.brl(c.desconto)) : '') +
+      '<li class="total"><span>Total</span><span>' + C.brl(c.total) + '</span></li>' + li('Recebido', C.brl(c.pago)) +
+      '<li class="total"><span>' + (c.restante < -0.004 ? 'Pago a mais' : 'Falta receber') + '</span><span>' + C.brl(Math.abs(c.restante)) + '</span></li></ul>' +
+      '<div class="destaque-un"><div class="r">Lucro estimado</div><div class="v">' + (C.numOk(c.lucro) ? C.brl(c.lucro) : '—') + '</div><div class="r">' +
+      (C.numOk(c.lucro) ? 'Custo dos produtos ' + C.brl(c.custo) + (c.taxaPagamento > 0 ? ', taxa ' + C.brl(c.taxaPagamento) : '') + (C.numOk(c.margem) ? ', margem ' + C.pct(c.margem) : '')
+        : (p.itens.length ? 'Algum produto está sem custo. Em itens avulsos, informe o custo unitário.' : 'Adicione produtos para ver o lucro.')) + '</div></div>' +
+      '<div class="acoes" style="margin-top:16px"><button type="button" class="btn fino" data-acao="whats-ped">' + I.mensagem + 'Mensagem para WhatsApp</button></div>';
+  }
+  function validarPedido(p) {
+    if (!p.clienteId) return 'Escolha o cliente do pedido.';
+    if (!p.dataEntrega) return 'Informe a data de ' + (p.tipoEntrega === 'entrega' ? 'entrega.' : 'retirada.');
+    if (!p.itens.length) return 'Adicione pelo menos um produto.';
+    if (p.itens.some(it => !(it.qtd > 0))) return 'Todo produto precisa de quantidade maior que zero.';
+    if (p.itens.some(it => it.tipo === 'avulso' && !String(it.nome || '').trim())) return 'Dê um nome ao item avulso.';
+    return null;
+  }
+  function salvarPedido(msg) {
+    const e = S.editor, p = e.d;
+    const erro = validarPedido(p);
+    if (erro) { toast(erro); return false; }
+    const c = calcPed(p);
+    const cli = S.dados.clientes[p.clienteId];
+    if (cli) p.clienteNome = cli.nome;
+    p.itens.forEach((it, i) => { if (it.tipo === 'rec' && C.numOk(c.itens[i].custoUnit)) it.custoUnit = c.itens[i].custoUnit; });
+    // Resumo em colunas simples: aparece legível na planilha e servirá aos relatórios.
+    p.total = c.total; p.pago = c.pago; p.restante = c.restante; p.lucroEstimado = c.lucro; p.situacaoPagamento = c.situacao;
+    const orig = S.dados.pedidos[p.id];
+    if (!orig || orig.status !== p.status) (p.historicoStatus = p.historicoStatus || []).push({ status: p.status, em: agoraISO() });
+    gravarRegistro('pedidos', clone(p));
+    const eraNovo = e.nova;
+    S.editor = { tipo: 'pedido', idRota: p.id, nova: false, d: clone(p), sujo: false };
+    toast(msg || (eraNovo ? 'Pedido criado.' : 'Pedido salvo.'));
+    if (eraNovo) { ignorarHash = true; location.hash = '#/pedido/' + encodeURIComponent(p.id); }
+    render(false);
+    return true;
+  }
+  function folhaProduto() {
+    const ctx = ctxCalc();
+    const ops = [];
+    lista('receitas').sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).forEach(function (r) {
+      const c = C.calcularReceita(r, ctx);
+      (c.variacoes || []).forEach(v => ops.push({ r: r, v: v }));
+    });
+    if (!ops.length) {
+      abrirFolha('Adicionar produto', '<p>Ainda não há receitas com opções de venda. Cadastre uma receita e as formas de vender (unidade, caixa, cento) para escolher aqui.</p><div class="rodape-folha"><a class="btn" href="#/receita/nova" data-fechar>Nova receita</a></div>');
+      return;
+    }
+    const corpo = '<label class="busca"><span class="sr">Buscar produto</span>' + I.busca + '<input class="entrada" id="busca-prod" type="search" placeholder="Buscar produto"></label><div class="lista" id="lista-prod">' +
+      ops.map((o, i) => '<button type="button" class="item" data-i="' + i + '" data-busca="' + esc(normBusca(o.r.nome + ' ' + o.v.nome)) + '"><div class="principal"><div class="nome">' + esc(o.r.nome) + '</div><div class="det">' + esc(o.v.nome || 'Opção') + '</div></div><div class="valor">' + (C.numOk(o.v.preco) ? C.brl(o.v.preco) : '<small>sem preço</small>') + '</div></button>').join('') +
+      '</div><p class="mudo" id="sem-prod" hidden>Nada encontrado.</p>';
+    abrirFolha('Adicionar produto', corpo, function (d) {
+      const b = $('#busca-prod', d);
+      b.addEventListener('input', function () {
+        const q = normBusca(b.value); let n = 0;
+        $$('#lista-prod .item', d).forEach(el => { const v = !q || el.dataset.busca.includes(q); el.hidden = !v; if (v) n++; });
+        $('#sem-prod', d).hidden = n > 0;
+      });
+      $$('#lista-prod .item', d).forEach(el => el.onclick = function () {
+        const o = ops[+el.dataset.i];
+        const p = S.editor.d;
+        const ja = p.itens.findIndex(it => it.tipo === 'rec' && it.receitaId === o.r.id && it.variacaoId === o.v.id);
+        if (ja >= 0) { p.itens[ja].qtd = (p.itens[ja].qtd || 0) + 1; toast('Quantidade aumentada: o produto já estava no pedido.'); }
+        else p.itens.push({ id: uid(), tipo: 'rec', receitaId: o.r.id, variacaoId: o.v.id, nome: o.r.nome + ' (' + (o.v.nome || 'opção') + ')', qtd: 1, precoUnit: C.numOk(o.v.preco) ? C.round2(o.v.preco) : null, custoUnit: C.numOk(o.v.custo) ? o.v.custo : null });
+        d.close(); marcarSujo(); render(false);
+        const idx = ja >= 0 ? ja : p.itens.length - 1;
+        setTimeout(() => { const el2 = $('[data-c="itens.' + idx + '.qtd"]'); if (el2) el2.focus(); }, 50);
+      });
+    });
+  }
+  function folhaPagamento(tipo) {
+    const p = S.editor.d, c = calcPed(p);
+    const valor = tipo === 'sinal' ? c.sinalSugerido : Math.max(0, c.restante);
+    const corpo = '<form id="f-pag" style="display:flex;flex-direction:column;gap:12px">' +
+      '<label class="campo"><span>Valor recebido</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="valor" inputmode="decimal" required value="' + inNum(C.round2(valor)) + '"></span>' + (tipo === 'sinal' ? '<small>Sinal padrão de ' + C.num(cfg().sinalPadraoPct) + '%. Pode mudar o valor.</small>' : '<small>Falta ' + C.brl(c.restante) + '.</small>') + '</label>' +
+      '<div class="linha-campos"><label class="campo"><span>Data</span><input class="entrada" type="date" name="data" required value="' + hoje() + '"></label>' +
+      '<label class="campo"><span>Forma</span><select class="entrada" name="forma">' + Object.keys(C.FORMAS_PAGAMENTO).map(k => '<option value="' + k + '"' + ((p.formaPagamento || 'pix') === k ? ' selected' : '') + '>' + C.FORMAS_PAGAMENTO[k].rotulo + '</option>').join('') + '</select></label></div>' +
+      '<label class="campo"><span>Observação</span><input class="entrada" name="obs" placeholder="Opcional"></label>' +
+      '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">Registrar ' + (tipo === 'sinal' ? 'sinal' : 'pagamento') + '</button></div></form>';
+    abrirFolha(tipo === 'sinal' ? 'Registrar sinal' : 'Registrar pagamento', corpo, function (d) {
+      $('#f-pag', d).addEventListener('submit', function (ev) {
+        ev.preventDefault(); const f = ev.target;
+        const v = C.lerNum(f.valor.value);
+        if (!(v > 0)) { toast('Informe um valor maior que zero.'); return; }
+        p.pagamentos.push({ id: uid(), data: f.data.value || hoje(), valor: C.round2(v), forma: f.forma.value, obs: f.obs.value.trim(), tipo: tipo });
+        let msg = 'Pagamento registrado.';
+        if (tipo === 'sinal' && p.status === 'orcamento') { p.status = 'confirmado'; msg = 'Sinal registrado e pedido confirmado.'; }
+        d.close(); marcarSujo();
+        if (!salvarPedido(msg)) render(false);
+      });
+    });
+  }
+  function folhaWhats(p) {
+    const cli = S.dados.clientes[p.clienteId] || {};
+    const tel = C.telefoneWhats(cli.telefone);
+    const pw = Object.assign({}, p, { clienteNome: cli.nome || p.clienteNome });
+    const tipos = [['orcamento', 'Orçamento'], ['confirmacao', 'Confirmação'], ['lembrete', 'Lembrete'], ['recibo', 'Recibo']];
+    let atual = p.status === 'orcamento' ? 'orcamento' : ['confirmado', 'producao'].includes(p.status) ? 'confirmacao' : p.status === 'pronto' ? 'lembrete' : 'recibo';
+    const corpo = '<div class="seg rolavel" role="group" aria-label="Tipo de mensagem">' + tipos.map(t => '<button type="button" data-tipo="' + t[0] + '" aria-pressed="' + (t[0] === atual) + '">' + t[1] + '</button>').join('') + '</div>' +
+      (!tel ? '<div class="aviso">' + I.alerta + '<div class="txt">' + (cli.telefone ? 'O telefone do cliente não parece ter DDD.' : 'Cliente sem telefone.') + ' O WhatsApp vai pedir para você escolher o contato.</div></div>' : '') +
+      '<label class="campo"><span>Texto (pode editar antes de enviar)</span><textarea class="entrada" id="txt-whats" rows="12"></textarea></label>' +
+      (S.editor && S.editor.sujo ? '<p class="mudo">O texto usa o que está na tela, inclusive o que ainda não foi salvo.</p>' : '') +
+      '<div class="rodape-folha"><button type="button" class="btn sec" id="copiar-whats">' + I.copiar + 'Copiar texto</button><a class="btn" id="abrir-whats" target="_blank" rel="noopener">' + I.mensagem + 'Abrir no WhatsApp</a></div>';
+    abrirFolha('Mensagem para WhatsApp', corpo, function (d) {
+      const ta = $('#txt-whats', d), a = $('#abrir-whats', d);
+      function link() { a.href = 'https://wa.me/' + tel + '?text=' + encodeURIComponent(ta.value); }
+      function gerar() { ta.value = C.textoWhats(atual, pw, calcPed(pw), S.dados.config.geral, { hoje: hoje() }); link(); }
+      $$('[data-tipo]', d).forEach(b => b.onclick = function () { atual = b.dataset.tipo; $$('[data-tipo]', d).forEach(x => x.setAttribute('aria-pressed', String(x === b))); gerar(); });
+      ta.addEventListener('input', link);
+      $('#copiar-whats', d).onclick = () => copiarTexto(ta.value);
+      gerar();
+    });
+  }
+
+  // ---------- Clientes ----------
+  function statsCliente(id) {
+    const ps = lista('pedidos').filter(p => p.clienteId === id && p.status !== 'cancelado').sort((a, b) => ordemData(b, a));
+    const feitos = ps.filter(p => p.status !== 'orcamento');
+    let total = 0, receber = 0;
+    feitos.forEach(p => { const c = calcPed(p); total += c.total; if (p.status === 'entregue') receber += Math.max(0, c.restante); });
+    const ultimo = feitos.map(p => p.dataEntrega).filter(Boolean).sort().slice(-1)[0] || null;
+    return { pedidos: ps, n: feitos.length, total: total, ticket: feitos.length ? total / feitos.length : null, ultimo: ultimo, receber: receber };
+  }
+  function aniversarioNoMes(c, mes) { return !!(c.aniversario && c.aniversario.slice(0, 2) === mes); }
+  function telaClientes() {
+    const cls = lista('clientes').sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+    let h = cab('Clientes', 'Contatos, preferências e histórico de compras.', '<button type="button" class="btn" data-acao="novo-cliente">' + I.mais + 'Novo cliente</button>');
+    if (!cls.length) return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhum cliente ainda</h2><p>Cadastre nome e WhatsApp. O histórico de pedidos de cada cliente se monta sozinho.</p><button type="button" class="btn" data-acao="novo-cliente">' + I.mais + 'Cadastrar cliente</button></div>';
+    const mes = hoje().slice(5, 7);
+    h += '<div class="linha-campos" style="margin-bottom:14px"><label class="busca"><span class="sr">Buscar cliente</span>' + I.busca + '<input class="entrada" id="busca-cli" type="search" placeholder="Buscar por nome ou telefone"></label></div><div class="lista" id="lista-cli">' +
+      cls.map(function (c) {
+        const s = statsCliente(c.id);
+        return '<a class="item" href="#/cliente/' + encodeURIComponent(c.id) + '" data-busca="' + esc(normBusca(c.nome + ' ' + (c.telefone || '') + ' ' + String(c.telefone || '').replace(/\D/g, ''))) + '"><div class="principal"><div class="nome">' + esc(c.nome) + '</div><div class="det">' + esc(c.telefone || 'sem telefone') + '</div></div>' +
+          '<div class="valor">' + (s.n ? C.brl(s.total) + '<small>' + s.n + (s.n === 1 ? ' pedido' : ' pedidos') + '</small>' : '<small>sem pedidos</small>') + '</div>' +
+          '<div class="chips">' + (aniversarioNoMes(c, mes) ? '<span class="chip alerta">aniversário em ' + esc(aniversarioTxt(c.aniversario)) + '</span>' : '') + (s.receber > 0.004 ? '<span class="chip neg">deve ' + C.brl(s.receber) + '</span>' : '') + '</div></a>';
+      }).join('') + '</div><p class="mudo" id="sem-res-cli" hidden style="padding:16px">Ninguém com esse nome. <button type="button" class="link-btn" data-acao="novo-cliente">Cadastrar novo</button></p>';
+    return h;
+  }
+  function montarFiltroClientes() {
+    const b = $('#busca-cli'); if (!b) return;
+    b.addEventListener('input', function () {
+      const q = normBusca(b.value); let n = 0;
+      $$('#lista-cli .item').forEach(el => { const v = !q || el.dataset.busca.includes(q); el.hidden = !v; if (v) n++; });
+      $('#sem-res-cli').hidden = n > 0;
+    });
+  }
+  function telaCliente(id) {
+    const c = S.dados.clientes[id];
+    if (!c || c.excluidoEm) return '<div class="bloco vazio">' + I.emblema + '<h2>Cliente não encontrado</h2><p>Pode ter sido excluído em outro aparelho.</p><a class="btn" href="#/clientes">Ver clientes</a></div>';
+    const s = statsCliente(id);
+    const tel = C.telefoneWhats(c.telefone);
+    let h = '<div class="cab-pagina"><div class="titulos"><a href="#/clientes" class="link-btn voltar">' + I.voltar + 'Clientes</a><h1>' + esc(c.nome) + '</h1></div><div class="acoes">' +
+      (tel ? '<a class="btn sec" href="https://wa.me/' + tel + '" target="_blank" rel="noopener">' + I.mensagem + 'WhatsApp</a>' : '') +
+      '<button type="button" class="btn sec" data-acao="editar-cliente" data-id="' + esc(id) + '">Editar</button><a class="btn" href="#/pedido/novo?cliente=' + encodeURIComponent(id) + '">' + I.mais + 'Novo pedido</a></div></div>';
+    h += '<div class="stats"><div class="stat"><div class="n">' + s.n + '</div><div class="r">' + (s.n === 1 ? 'pedido feito' : 'pedidos feitos') + '</div></div>' +
+      '<div class="stat"><div class="n">' + C.brl(s.total) + '</div><div class="r">no total</div></div>' +
+      '<div class="stat"><div class="n">' + (C.numOk(s.ticket) ? C.brl(s.ticket) : '—') + '</div><div class="r">por pedido, em média</div></div>' +
+      '<div class="stat"><div class="n">' + (s.ultimo ? dataDia(s.ultimo) : '—') + '</div><div class="r">último pedido</div></div></div>';
+    if (s.receber > 0.004) h += '<div class="aviso neg" style="margin-bottom:16px">' + I.alerta + '<div class="txt">Falta receber <b>' + C.brl(s.receber) + '</b> de pedidos já entregues.</div></div>';
+    h += '<section class="bloco"><h2>Dados</h2><dl class="dados-cli">' +
+      '<div><dt>Telefone</dt><dd>' + esc(c.telefone || '—') + '</dd></div><div><dt>Endereço</dt><dd>' + esc(c.endereco || '—') + '</dd></div>' +
+      '<div><dt>Aniversário</dt><dd>' + esc(aniversarioTxt(c.aniversario) || '—') + '</dd></div><div><dt>Preferências e restrições</dt><dd>' + esc(c.obs || '—') + '</dd></div></dl></section>';
+    h += '<section class="bloco"><h2>Pedidos</h2>' + (s.pedidos.length ? '<div class="lista">' + s.pedidos.map(cardPedido).join('') + '</div>' : '<p class="mudo">Nenhum pedido ainda.</p>') + '</section>';
+    return h;
+  }
+  function folhaCliente(id, aoSalvar) {
+    const orig = id ? S.dados.clientes[id] : null;
+    const c = orig ? clone(orig) : { id: uid(), nome: '', telefone: '', endereco: '', aniversario: '', obs: '' };
+    const [am, ad] = c.aniversario ? c.aniversario.split('-') : ['', ''];
+    const corpo = '<form id="f-cli" style="display:flex;flex-direction:column;gap:12px">' +
+      '<label class="campo"><span>Nome</span><input class="entrada" name="nome" required value="' + esc(c.nome) + '" autocomplete="off"></label>' +
+      '<label class="campo"><span>WhatsApp</span><input class="entrada" name="telefone" type="tel" inputmode="tel" value="' + esc(c.telefone) + '" placeholder="(11) 90000-0000"></label>' +
+      '<label class="campo"><span>Endereço</span><input class="entrada" name="endereco" value="' + esc(c.endereco) + '" placeholder="Para entregas"></label>' +
+      '<div class="campo"><span>Aniversário</span><div class="linha-campos" style="flex-wrap:nowrap"><select class="entrada" name="dia" aria-label="Dia"><option value="">Dia</option>' + Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')).map(d => '<option' + (d === ad ? ' selected' : '') + '>' + d + '</option>').join('') + '</select>' +
+      '<select class="entrada" name="mes" aria-label="Mês"><option value="">Mês</option>' + MESES.map((m, i) => { const v = String(i + 1).padStart(2, '0'); return '<option value="' + v + '"' + (v === am ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div><small>Opcional. Aparece no Início no mês do aniversário.</small></div>' +
+      '<label class="campo"><span>Preferências e restrições</span><textarea class="entrada" name="obs" placeholder="Ex.: alergia a amendoim, prefere meio amargo">' + esc(c.obs) + '</textarea><small>Aparece em destaque nos pedidos deste cliente.</small></label>' +
+      '<div class="rodape-folha">' + (orig ? '<button type="button" class="btn perigo" data-excluir>' + I.lixo + 'Excluir</button>' : '') + '<span style="flex:1"></span><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">Salvar cliente</button></div></form>';
+    abrirFolha(orig ? 'Editar cliente' : 'Novo cliente', corpo, function (d) {
+      const f = $('#f-cli', d);
+      f.nome.focus();
+      f.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const nome = f.nome.value.trim();
+        if (!nome) { f.nome.focus(); return; }
+        if ((f.dia.value && !f.mes.value) || (!f.dia.value && f.mes.value)) { toast('Escolha o dia e o mês do aniversário, ou deixe os dois em branco.'); return; }
+        const novo = Object.assign(c, { nome: nome, telefone: f.telefone.value.trim(), endereco: f.endereco.value.trim(), aniversario: f.dia.value ? f.mes.value + '-' + f.dia.value : '', obs: f.obs.value.trim() });
+        gravarRegistro('clientes', novo);
+        d.close();
+        toast(orig ? 'Cliente salvo.' : 'Cliente cadastrado.');
+        if (aoSalvar) aoSalvar(novo); else render(false);
+      });
+      const ex = $('[data-excluir]', d);
+      if (ex) ex.onclick = async function () {
+        const n = lista('pedidos').filter(p => p.clienteId === orig.id).length;
+        if (n) { toast('Este cliente tem ' + n + (n === 1 ? ' pedido' : ' pedidos') + ' e não pode ser excluído, para não perder o histórico.'); return; }
+        d.close();
+        if (await confirmar('Excluir cliente?', 'Excluir <b>' + esc(orig.nome) + '</b>.', 'Excluir cliente', true)) { excluirRegistro('clientes', orig.id); toast('Cliente excluído.'); ir('#/clientes'); }
+      };
+    });
+  }
+  function folhaEscolherCliente(fn) {
+    const cls = lista('clientes').sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+    const corpo = '<label class="busca"><span class="sr">Buscar cliente</span>' + I.busca + '<input class="entrada" id="busca-ec" type="search" placeholder="Buscar por nome ou telefone"></label>' +
+      '<div class="lista" id="lista-ec">' + cls.map(c => '<button type="button" class="item" data-id="' + esc(c.id) + '" data-busca="' + esc(normBusca(c.nome + ' ' + String(c.telefone || '').replace(/\D/g, ''))) + '"><div class="principal"><div class="nome">' + esc(c.nome) + '</div><div class="det">' + esc(c.telefone || 'sem telefone') + '</div></div></button>').join('') + '</div>' +
+      '<p class="mudo" id="sem-ec"' + (cls.length ? ' hidden' : '') + '>' + (cls.length ? 'Ninguém com esse nome.' : 'Nenhum cliente cadastrado ainda.') + '</p><button type="button" class="btn sec" data-novo>' + I.mais + 'Cadastrar cliente novo</button>';
+    abrirFolha('Escolher cliente', corpo, function (d) {
+      const b = $('#busca-ec', d);
+      b.addEventListener('input', function () {
+        const q = normBusca(b.value); let n = 0;
+        $$('#lista-ec .item', d).forEach(el => { const v = !q || el.dataset.busca.includes(q.replace(/\D/g, '') || q) || el.dataset.busca.includes(q); el.hidden = !v; if (v) n++; });
+        $('#sem-ec', d).hidden = n > 0;
+      });
+      $$('#lista-ec .item', d).forEach(el => el.onclick = () => { d.close(); fn(S.dados.clientes[el.dataset.id]); });
+      $('[data-novo]', d).onclick = () => { d.close(); folhaCliente(null, fn); };
+    });
+  }
+
+  // ---------- Agenda ----------
+  function telaAgenda() {
+    const A = S.agenda || (S.agenda = { mes: hoje().slice(0, 7), dia: hoje() });
+    const [y, m] = A.mes.split('-').map(Number);
+    const vazios = new Date(y, m - 1, 1).getDay(), nDias = new Date(y, m, 0).getDate();
+    const porDia = {};
+    lista('pedidos').filter(p => p.status !== 'cancelado' && p.dataEntrega && p.dataEntrega.slice(0, 7) === A.mes).forEach(p => { (porDia[p.dataEntrega] = porDia[p.dataEntrega] || []).push(p); });
+    let h = cab('Agenda', 'Entregas e retiradas por dia.', '<a class="btn" href="#/pedido/novo?data=' + A.dia + '">' + I.mais + 'Novo pedido neste dia</a>') + abas(ABAS_PED, '#/agenda');
+    h += '<section class="bloco"><div class="cal-cab"><button type="button" class="btn-icone" data-acao="agenda-mes" data-v="-1" aria-label="Mês anterior">' + I.voltar + '</button><h2>' + MESES[m - 1].charAt(0).toUpperCase() + MESES[m - 1].slice(1) + ' de ' + y + '</h2><button type="button" class="btn-icone" data-acao="agenda-mes" data-v="1" aria-label="Próximo mês">' + I.seta + '</button></div>' +
+      '<div class="cal" role="grid"><div class="cal-sem" aria-hidden="true">' + ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(x => '<span>' + x + '</span>').join('') + '</div><div class="cal-dias">' +
+      '<span></span>'.repeat(vazios) + Array.from({ length: nDias }, function (_, i) {
+        const iso = A.mes + '-' + String(i + 1).padStart(2, '0');
+        const n = (porDia[iso] || []).length;
+        return '<button type="button" class="cal-dia' + (iso === hoje() ? ' hoje' : '') + (iso === A.dia ? ' sel' : '') + '" data-acao="agenda-dia" data-v="' + iso + '" aria-pressed="' + (iso === A.dia) + '" aria-label="' + (i + 1) + ' de ' + MESES[m - 1] + (n ? ', ' + n + (n === 1 ? ' pedido' : ' pedidos') : '') + '"><span>' + (i + 1) + '</span>' + (n ? '<i>' + n + '</i>' : '') + '</button>';
+      }).join('') + '</div></div>' +
+      (A.mes !== hoje().slice(0, 7) || A.dia !== hoje() ? '<button type="button" class="link-btn" data-acao="agenda-hoje">Voltar para hoje</button>' : '') + '</section>';
+    const doDia = lista('pedidos').filter(p => p.dataEntrega === A.dia && p.status !== 'cancelado').sort(ordemData);
+    h += '<section class="bloco"><h2>' + esc(dataCurta(A.dia).charAt(0).toUpperCase() + dataCurta(A.dia).slice(1)) + '</h2>' +
+      (doDia.length ? '<div class="lista">' + doDia.map(cardPedido).join('') + '</div>' : '<p class="mudo">Nenhum pedido para este dia.</p>') + '</section>';
+    return h;
+  }
+
+  // ---------- Produção ----------
+  function textoProducao(dia, linhas) {
+    return 'Produção de ' + dataDia(dia) + '\n\n' + linhas.map(l => (l.feito ? '[x] ' : '[ ] ') + l.nome + ': ' + l.qtd + (l.lotes ? ' (' + l.lotes + ')' : '')).join('\n');
+  }
+  function telaProducao() {
+    const dia = S.prodDia || (S.prodDia = hoje());
+    const doDia = lista('pedidos').filter(p => p.dataEntrega === dia && p.status !== 'cancelado');
+    const peds = doDia.filter(p => ['confirmado', 'producao'].includes(p.status)).sort(ordemData);
+    const orc = doDia.filter(p => p.status === 'orcamento').length;
+    const prontos = doDia.filter(p => ['pronto', 'entregue'].includes(p.status)).length;
+    const feito = S.meta.producaoFeita || {};
+    let h = cab('Produção', 'O que fazer para os pedidos do dia, já somando receitas usadas dentro de outras.') + abas(ABAS_PED, '#/producao');
+    h += '<div class="linha-campos" style="margin-bottom:16px;align-items:flex-end"><label class="campo" style="flex:0 1 200px"><span>Dia</span><input class="entrada" type="date" id="prod-dia" value="' + dia + '"></label>' +
+      '<div class="acoes"><button type="button" class="btn sec fino" data-acao="prod-dia" data-v="0" aria-pressed="' + (dia === hoje()) + '">Hoje</button><button type="button" class="btn sec fino" data-acao="prod-dia" data-v="1" aria-pressed="' + (dia === C.somarDias(hoje(), 1)) + '">Amanhã</button></div></div>';
+    if (!peds.length) {
+      return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nada para produzir ' + esc(dataCurta(dia)) + '</h2><p>' +
+        (prontos ? prontos + (prontos === 1 ? ' pedido deste dia já está pronto ou entregue. ' : ' pedidos deste dia já estão prontos ou entregues. ') : '') +
+        (orc ? orc + (orc === 1 ? ' orçamento ainda não foi confirmado.' : ' orçamentos ainda não foram confirmados.') : 'A lista usa pedidos confirmados ou em produção.') + '</p><a class="btn sec" href="#/agenda">Ver agenda</a></div>';
+    }
+    const nx = C.necessidades(peds, ctxCalc());
+    const linhas = Object.values(nx.producao).map(function (x) {
+      const r = S.dados.receitas[x.receitaId] || {};
+      const lotes = x.rendBase ? x.qtdBase / x.rendBase : null;
+      return { id: x.receitaId, nome: r.nome || 'Receita', direto: x.direto > 0, qtd: C.qtdLegivel(x.qtdBase, x.unidadeBase || 'un'),
+        lotes: C.numOk(lotes) ? C.num(lotes, 2) + (lotes === 1 ? ' receita' : ' receitas') : '', feito: !!feito[dia + ':' + x.receitaId] };
+    }).sort((a, b) => (a.direto === b.direto ? a.nome.localeCompare(b.nome, 'pt-BR') : a.direto ? 1 : -1));
+    S.textoCopia = textoProducao(dia, linhas);
+    const nConf = peds.filter(p => p.status === 'confirmado').length;
+    h += '<section class="bloco"><h2>Fazer</h2><p class="explica">As receitas de base (recheios, massas) aparecem primeiro, porque entram nas outras.</p><div class="lista-check">' +
+      linhas.map(l => '<label class="linha-check' + (l.feito ? ' feito' : '') + '"><input type="checkbox" data-prod="' + esc(dia + ':' + l.id) + '"' + (l.feito ? ' checked' : '') + '><span class="principal"><b>' + esc(l.nome) + '</b><small>' + (l.direto ? '' : 'base para outras receitas') + '</small></span><span class="valor">' + esc(l.qtd) + '<small>' + esc(l.lotes) + '</small></span></label>').join('') + '</div>' +
+      (nx.avisos.length ? '<div class="aviso" style="margin-top:12px">' + I.alerta + '<div class="txt"><ul>' + nx.avisos.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul></div></div>' : '') +
+      '<div class="acoes" style="margin-top:14px">' + (nConf ? '<button type="button" class="btn" data-acao="prod-iniciar">Marcar ' + (nConf === 1 ? 'o pedido' : 'os ' + nConf + ' pedidos') + ' como em produção</button>' : '') +
+      '<button type="button" class="btn sec" data-acao="copiar-lista">' + I.copiar + 'Copiar lista</button><a class="btn sec" href="#/compras?de=' + dia + '&ate=' + dia + '">Ver ingredientes do dia</a></div></section>';
+    h += '<section class="bloco"><h2>Pedidos do dia</h2>' + (orc ? '<p class="explica">' + orc + (orc === 1 ? ' orçamento deste dia não entra na conta' : ' orçamentos deste dia não entram na conta') + ' até ser confirmado.</p>' : '') + '<div class="lista">' + peds.map(cardPedido).join('') + '</div></section>';
+    return h;
+  }
+
+  // ---------- Compras ----------
+  function telaCompras() {
+    const F = S.compras || (S.compras = { de: hoje(), ate: C.somarDias(hoje(), 6), orc: false });
+    const sts = F.orc ? ['orcamento', 'confirmado', 'producao'] : ['confirmado', 'producao'];
+    const peds = lista('pedidos').filter(p => sts.includes(p.status) && p.dataEntrega && p.dataEntrega >= F.de && p.dataEntrega <= F.ate);
+    const nx = C.necessidades(peds, ctxCalc());
+    let h = cab('Lista de compras', 'Ingredientes para os pedidos do período, com receitas dentro de receitas já desmontadas e a perda de cada uma.') + abas(ABAS_PED, '#/compras');
+    h += '<section class="bloco"><div class="linha-campos"><label class="campo"><span>De</span><input class="entrada" type="date" data-compras="de" value="' + F.de + '"></label><label class="campo"><span>Até</span><input class="entrada" type="date" data-compras="ate" value="' + F.ate + '"></label></div>' +
+      '<div class="acoes" style="margin-top:10px"><button type="button" class="btn sec fino" data-acao="compras-periodo" data-v="7">Próximos 7 dias</button><button type="button" class="btn sec fino" data-acao="compras-periodo" data-v="1">Só amanhã</button></div>' +
+      '<label class="chave" style="margin-top:6px"><span class="rot">Incluir orçamentos<small>Para já ter noção, antes de o cliente confirmar</small></span><input type="checkbox" data-compras="orc"' + (F.orc ? ' checked' : '') + '></label></section>';
+    if (F.ate < F.de) return h + '<div class="aviso neg">' + I.alerta + '<div class="txt">A data final vem antes da inicial.</div></div>';
+    const linhas = Object.values(nx.compras).map(c => ({ c: c, ing: S.dados.ingredientes[c.ingredienteId] })).filter(x => x.ing)
+      .sort((a, b) => a.ing.nome.localeCompare(b.ing.nome, 'pt-BR'));
+    if (!peds.length || !linhas.length) {
+      return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nada a comprar no período</h2><p>' + (peds.length ? 'Os pedidos do período não têm receitas com ingredientes calculáveis.' : 'Não há pedidos ' + (F.orc ? '' : 'confirmados ') + 'entre ' + dataDia(F.de) + ' e ' + dataDia(F.ate) + '.') + '</p></div>' +
+        (nx.avisos.length ? '<div class="aviso">' + I.alerta + '<div class="txt"><ul>' + nx.avisos.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul></div></div>' : '');
+    }
+    const total = linhas.reduce((s, x) => s + (x.c.custoEmbalagens || 0), 0);
+    S.textoCopia = 'Lista de compras (' + dataDia(F.de) + (F.ate !== F.de ? ' a ' + dataDia(F.ate) : '') + ')\n\n' + linhas.map(x => '- ' + x.ing.nome + ': ' + (x.c.embalagens ? x.c.embalagens + ' × ' + C.num(x.ing.qtdEmbalagem) + ' ' + rotUn(x.ing.unidade) + ' (usa ' + C.qtdLegivel(x.c.qtdBase, x.c.base) + ')' : C.qtdLegivel(x.c.qtdBase, x.c.base))).join('\n') + '\n\nEstimativa: ' + C.brl(total);
+    h += '<section class="bloco"><h2>' + linhas.length + (linhas.length === 1 ? ' ingrediente' : ' ingredientes') + ' para ' + peds.length + (peds.length === 1 ? ' pedido' : ' pedidos') + '</h2>' +
+      '<p class="explica">"Usa" é o que as receitas consomem. "Comprar" arredonda para embalagens inteiras. Ainda não desconta o que você tem em casa; isso chega com o estoque, na próxima etapa.</p>' +
+      '<div class="tabela-compras" role="table"><div class="tc-cab" role="row"><span role="columnheader">Ingrediente</span><span role="columnheader">Usa</span><span role="columnheader">Comprar</span><span role="columnheader">Custo</span></div>' +
+      linhas.map(x => '<div class="tc-lin" role="row"><span role="cell"><b>' + esc(x.ing.nome) + '</b></span><span role="cell" data-r="Usa">' + C.qtdLegivel(x.c.qtdBase, x.c.base) + '</span><span role="cell" data-r="Comprar">' + (x.c.embalagens ? x.c.embalagens + ' × ' + C.num(x.ing.qtdEmbalagem) + ' ' + rotUn(x.ing.unidade) : '—') + '</span><span role="cell" data-r="Custo">' + C.brl(x.c.custoEmbalagens) + '</span></div>').join('') +
+      '<div class="tc-lin tc-total" role="row"><span role="cell"><b>Total estimado</b></span><span role="cell"></span><span role="cell"></span><span role="cell"><b>' + C.brl(total) + '</b></span></div></div>' +
+      (nx.avisos.length ? '<div class="aviso" style="margin-top:12px">' + I.alerta + '<div class="txt"><ul>' + nx.avisos.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul></div></div>' : '') +
+      '<div class="acoes" style="margin-top:14px"><button type="button" class="btn sec" data-acao="copiar-lista">' + I.copiar + 'Copiar lista</button><a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(S.textoCopia) + '">' + I.mensagem + 'Enviar no WhatsApp</a></div></section>';
+    return h;
+  }
+
+  // ---------- Início: blocos de pedidos ----------
+  function blocosPedidosInicio() {
+    const hj = hoje();
+    const peds = lista('pedidos').filter(p => p.status !== 'cancelado');
+    const deHoje = peds.filter(p => p.dataEntrega === hj).sort(ordemData);
+    const amanha = peds.filter(p => p.dataEntrega === C.somarDias(hj, 1) && p.status !== 'entregue').length;
+    const passados = peds.filter(p => ['confirmado', 'producao', 'pronto'].includes(p.status) && p.dataEntrega && p.dataEntrega < hj).sort(ordemData);
+    const orcs = peds.filter(p => p.status === 'orcamento' && (!p.dataEntrega || p.dataEntrega >= hj)).sort(ordemData);
+    const receber = peds.filter(p => p.status === 'entregue').map(p => ({ p: p, c: calcPed(p) })).filter(x => x.c.restante > 0.004);
+    const mes = hj.slice(5, 7);
+    const aniv = lista('clientes').filter(c => aniversarioNoMes(c, mes)).sort((a, b) => a.aniversario.localeCompare(b.aniversario));
+    let h = '<section class="bloco"><div class="cab-bloco"><h2>Hoje</h2><a class="link-btn" href="#/agenda">Ver agenda</a></div>' +
+      (deHoje.length ? '<div class="lista">' + deHoje.map(cardPedido).join('') + '</div>' : '<p class="mudo">Nenhuma entrega ou retirada hoje.</p>') +
+      (amanha ? '<p class="mudo" style="margin-top:10px">Amanhã: ' + amanha + (amanha === 1 ? ' pedido. ' : ' pedidos. ') + '<a href="#/producao" data-acao="prod-dia" data-v="1">Ver produção de amanhã</a></p>' : '') + '</section>';
+    if (passados.length) h += '<section class="bloco"><h2>Data já passou</h2><p class="explica">Pedidos com data anterior a hoje que ainda não foram marcados como entregues.</p><div class="lista">' + passados.map(cardPedido).join('') + '</div></section>';
+    if (orcs.length) h += '<section class="bloco"><h2>Orçamentos aguardando resposta</h2><div class="lista">' + orcs.slice(0, 5).map(cardPedido).join('') + '</div>' + (orcs.length > 5 ? '<a class="link-btn" href="#/pedidos?f=orcamento">Ver todos os ' + orcs.length + '</a>' : '') + '</section>';
+    if (receber.length) {
+      const tot = receber.reduce((s, x) => s + x.c.restante, 0);
+      h += '<section class="bloco"><h2>A receber: ' + C.brl(tot) + '</h2><p class="explica">Pedidos entregues que ainda não foram pagos por inteiro.</p><div class="lista">' + receber.map(x => cardPedido(x.p)).join('') + '</div></section>';
+    }
+    if (aniv.length) h += '<section class="bloco"><h2>Aniversariantes de ' + MESES[Number(mes) - 1] + '</h2><div class="lista">' + aniv.map(c => '<a class="item" href="#/cliente/' + encodeURIComponent(c.id) + '"><div class="principal"><div class="nome">' + esc(c.nome) + '</div><div class="det">' + esc(aniversarioTxt(c.aniversario)) + '</div></div>' + I.seta + '</a>').join('') + '</div></section>';
+    return h;
+  }
+
+  // ---------- Ações ----------
+  function statusRapido(v) {
+    const p = S.editor.d;
+    const antes = p.status; p.status = v; marcarSujo();
+    const c = calcPed(p);
+    if (S.editor.nova) { render(false); return; }
+    const msg = 'Marcado como ' + C.STATUS_PEDIDO[v].rotulo.toLowerCase() + '.' + (v === 'entregue' && c.restante > 0.004 ? ' Falta receber ' + C.brl(c.restante) + '.' : '');
+    if (!salvarPedido(msg)) { p.status = antes; render(false); }
+  }
+  const ACOES_PED = {
+    'novo-cliente': function () { folhaCliente(null, c => ir('#/cliente/' + encodeURIComponent(c.id))); },
+    'editar-cliente': function (el) { folhaCliente(el.dataset.id); },
+    'escolher-cliente': function () {
+      folhaEscolherCliente(function (cli) {
+        const p = S.editor.d;
+        p.clienteId = cli.id; p.clienteNome = cli.nome;
+        if (!p.endereco && cli.endereco) p.endereco = cli.endereco;
+        marcarSujo(); render(false);
+      });
+    },
+    'status-ped': function (el) { statusRapido(el.dataset.v); },
+    'reabrir-ped': function () { statusRapido('confirmado'); },
+    'cancelar-ped': async function () {
+      if (!await confirmar('Cancelar pedido?', 'O pedido sai da agenda, da produção e das compras. Os pagamentos registrados continuam nele.', 'Cancelar pedido', true)) return;
+      statusRapido('cancelado');
+    },
+    'excluir-ped': async function () {
+      const p = S.editor.d;
+      if (!await confirmar('Excluir pedido?', 'O pedido de <b>' + esc(nomeCliente(p)) + '</b> some da lista e do histórico do cliente. Para manter o registro, prefira cancelar.', 'Excluir pedido', true)) return;
+      excluirRegistro('pedidos', p.id); S.editor = null; toast('Pedido excluído.'); ir('#/pedidos');
+    },
+    'tipo-ent': function (el) {
+      const p = S.editor.d; p.tipoEntrega = el.dataset.v;
+      if (p.tipoEntrega === 'entrega') {
+        if (!C.numOk(p.taxaEntrega)) p.taxaEntrega = cfg().taxas.entrega;
+        const cli = S.dados.clientes[p.clienteId];
+        if (!p.endereco && cli && cli.endereco) p.endereco = cli.endereco;
+      }
+      marcarSujo(); render(false);
+    },
+    'add-produto': folhaProduto,
+    'add-avulso': function () {
+      S.editor.d.itens.push({ id: uid(), tipo: 'avulso', nome: '', qtd: 1, precoUnit: null, custoUnit: null });
+      marcarSujo(); render(false);
+      setTimeout(() => { const el = $('[data-c="itens.' + (S.editor.d.itens.length - 1) + '.nome"]'); if (el) el.focus(); }, 50);
+    },
+    'rem-item-ped': function (el) { S.editor.d.itens.splice(+el.dataset.i, 1); marcarSujo(); render(false); },
+    pagar: function (el) { folhaPagamento(el.dataset.v); },
+    'rem-pag': async function (el) {
+      const x = S.editor.d.pagamentos[+el.dataset.i];
+      if (!await confirmar('Remover pagamento?', 'Remover o registro de ' + C.brl(x.valor) + ' de ' + dataDia(x.data) + '.', 'Remover', true)) return;
+      S.editor.d.pagamentos.splice(+el.dataset.i, 1); marcarSujo();
+      if (!salvarPedido('Pagamento removido.')) render(false);
+    },
+    'salvar-ped': function () { salvarPedido(); },
+    'whats-ped': function () { folhaWhats(S.editor.d); },
+    'agenda-dia': function (el) { S.agenda.dia = el.dataset.v; render(false); },
+    'agenda-mes': function (el) {
+      const [y, m] = S.agenda.mes.split('-').map(Number);
+      const d = new Date(y, m - 1 + Number(el.dataset.v), 1);
+      S.agenda.mes = C.dataISO(d).slice(0, 7);
+      S.agenda.dia = S.agenda.mes === hoje().slice(0, 7) ? hoje() : S.agenda.mes + '-01';
+      render(false);
+    },
+    'agenda-hoje': function () { S.agenda = { mes: hoje().slice(0, 7), dia: hoje() }; render(false); },
+    'prod-dia': function (el) { S.prodDia = C.somarDias(hoje(), Number(el.dataset.v)); if (location.hash !== '#/producao') ir('#/producao'); else render(false); },
+    'prod-iniciar': function () {
+      const dia = S.prodDia;
+      const ps = lista('pedidos').filter(p => p.dataEntrega === dia && p.status === 'confirmado');
+      ps.forEach(function (p) { const c = clone(p); c.status = 'producao'; (c.historicoStatus = c.historicoStatus || []).push({ status: 'producao', em: agoraISO() }); gravarRegistro('pedidos', c); });
+      toast(ps.length === 1 ? '1 pedido em produção.' : ps.length + ' pedidos em produção.'); render(false);
+    },
+    'copiar-lista': function () { if (S.textoCopia) copiarTexto(S.textoCopia); },
+    'compras-periodo': function (el) {
+      const n = Number(el.dataset.v);
+      S.compras = Object.assign(S.compras || {}, n === 1 ? { de: C.somarDias(hoje(), 1), ate: C.somarDias(hoje(), 1) } : { de: hoje(), ate: C.somarDias(hoje(), n - 1) });
+      render(false);
+    }
+  };
+  document.addEventListener('change', function (e) {
+    const t = e.target;
+    if (t.dataset && t.dataset.prod !== undefined) {
+      S.meta.producaoFeita = S.meta.producaoFeita || {};
+      if (t.checked) S.meta.producaoFeita[t.dataset.prod] = true; else delete S.meta.producaoFeita[t.dataset.prod];
+      // guarda só as duas últimas semanas
+      const limite = C.somarDias(hoje(), -14);
+      Object.keys(S.meta.producaoFeita).forEach(k => { if (k.slice(0, 10) < limite) delete S.meta.producaoFeita[k]; });
+      salvarLocal();
+      t.closest('.linha-check').classList.toggle('feito', t.checked);
+      return;
+    }
+    if (t.id === 'prod-dia' && t.value) { S.prodDia = t.value; render(false); return; }
+    if (t.dataset && t.dataset.compras) {
+      S.compras = S.compras || {};
+      if (t.dataset.compras === 'orc') S.compras.orc = t.checked; else if (t.value) S.compras[t.dataset.compras] = t.value;
+      render(false);
+    }
+  });
 
   // ================= Ajustes =================
   function telaAjustes() {
@@ -946,6 +1600,8 @@
     h += '</section>';
 
     // Custos fixos
+    h += '<h2 class="titulo-grupo">Ajustes da doceria</h2><p class="mudo" style="margin:-4px 0 10px">Custos fixos, mão de obra, preços e taxas e dados da doceria valem para todos os aparelhos. Na planilha, ficam na aba Ajustes.</p>' +
+      '<div id="estado-ajustes" class="aviso" role="status" style="margin-bottom:16px"></div>';
     h += '<section class="bloco" id="fixos"><h2>Custos fixos do mês</h2><p class="explica">Contas que chegam todo mês, vendendo ou não. O total é dividido pelas horas de produção e entra no custo de cada receita conforme o tempo dela. Quando o módulo de caixa chegar, estes valores virão das despesas lançadas.</p><div class="linhas-edit">' +
       cf.custosFixos.map((c, i) => '<div class="linha-edit" style="grid-template-columns:1fr 150px auto"><input class="entrada" data-cfg="custosFixos.' + i + '.nome" value="' + esc(c.nome) + '" aria-label="Nome do custo"><span class="com-prefixo"><i>R$</i><input class="entrada num" data-cfg="custosFixos.' + i + '.valor" data-n inputmode="decimal" value="' + inNum(c.valor) + '" aria-label="Valor de ' + esc(c.nome) + '"></span><button type="button" class="btn-icone" data-acao="rem-fixo" data-i="' + i + '" aria-label="Remover ' + esc(c.nome) + '">' + I.lixo + '</button></div>').join('') +
       '</div><button type="button" class="btn sec" style="margin-top:12px" data-acao="add-fixo">' + I.mais + 'Adicionar custo fixo</button>' +
@@ -967,6 +1623,7 @@
     h += '<section class="bloco"><h2>Preços e taxas</h2><div class="grade">' +
       campoPct('Margem padrão das receitas novas', 'margemPadrao', cf.margemPadrao) +
       campoPct('Avisar quando a margem ficar abaixo de', 'margemAlerta', cf.margemAlerta) +
+      campoPct('Sinal padrão dos pedidos', 'sinalPadraoPct', cf.sinalPadraoPct) +
       campoPct('Cartão de débito', 'taxas.debito', t.debito) +
       campoPct('Crédito à vista', 'taxas.credito', t.credito) +
       campoPct('Crédito parcelado', 'taxas.parcelado', t.parcelado) +
@@ -980,7 +1637,7 @@
       ['nome:Nome', 'instagram:Instagram', 'telefone:Telefone', 'email:E-mail'].map(x => { const [k, r] = x.split(':'); return '<label class="campo"><span>' + r + '</span><input class="entrada" data-cfg="doceria.' + k + '" value="' + esc(dc[k]) + '"></label>'; }).join('') + '</div></section>';
 
     // Aparência
-    h += '<section class="bloco"><h2>Aparência deste aparelho</h2><div class="campo"><span>Tema</span><div class="seg" role="group" aria-label="Tema">' +
+    h += '<h2 class="titulo-grupo">Só neste aparelho</h2><section class="bloco"><h2>Aparência</h2><div class="campo"><span>Tema</span><div class="seg" role="group" aria-label="Tema">' +
       [['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Escuro']].map(o => '<button type="button" data-acao="tema" data-v="' + o[0] + '" aria-pressed="' + ((S.meta.tema || 'auto') === o[0]) + '">' + o[1] + '</button>').join('') + '</div></div>' +
       '<label class="campo" style="margin-top:14px"><span>Tamanho do texto: ' + Math.round((S.meta.fonte || 1) * 100) + '%</span><input type="range" min="0.85" max="1.3" step="0.05" value="' + (S.meta.fonte || 1) + '" id="fonte"></label></section>';
 
@@ -993,14 +1650,26 @@
   function campoPct(rot, cam, v) {
     return '<label class="campo"><span>' + rot + '</span><span class="com-prefixo"><input class="entrada num" data-cfg="' + cam + '" data-n inputmode="decimal" value="' + inNum(v) + '"><i class="dir">%</i></span></label>';
   }
-  let timerCfg = null;
+  // Cada ajuste entra na fila de envio (e no diário de segurança) no mesmo instante,
+  // para não se perder se o app fechar e não ser sobrescrito por uma sincronização.
   function editarConfig(el) {
-    const c = cfg();
-    const v = el.hasAttribute('data-n') ? C.lerNum(el.value) : el.value;
-    gravarCaminho(c, el.dataset.cfg, v);
-    S.dados.config.geral = Object.assign({}, S.dados.config.geral || {}, c);
-    clearTimeout(timerCfg);
-    timerCfg = setTimeout(function () { gravarRegistro('config', clone(S.dados.config.geral)); }, 600);
+    const c = clone(cfg());
+    gravarCaminho(c, el.dataset.cfg, el.hasAttribute('data-n') ? C.lerNum(el.value) : el.value);
+    gravarRegistro('config', c);
+  }
+  function textoEstadoAjustes() {
+    if (S.meta.modo !== 'planilha') return { cls: '', t: 'Modo de teste: estes ajustes ficam só neste aparelho até você conectar a planilha.' };
+    const pend = S.fila.some(m => m.tabela === 'config');
+    if (pend && S.sync.estado === 'offline') return { cls: '', t: 'Sem internet: as alterações serão enviadas para a planilha quando a conexão voltar.' };
+    if (pend) return { cls: '', t: 'Enviando alterações para a planilha…' };
+    if (S.sync.estado === 'erro' || S.sync.estado === 'pin') return { cls: 'neg', t: 'Não foi possível falar com a planilha. Veja a sincronização acima.' };
+    const em = S.dados.config.geral && S.dados.config.geral.atualizadoEm;
+    return { cls: 'pos', t: 'Salvo na planilha' + (em ? ' (última alteração em ' + dataHoraBR(em) + ')' : '') + '. Vale para todos os aparelhos.' };
+  }
+  function atualizarEstadoAjustes() {
+    const el = $('#estado-ajustes'); if (!el) return;
+    const e = textoEstadoAjustes();
+    el.className = 'aviso ' + e.cls; el.innerHTML = (e.cls === 'pos' ? I.ok : I.nuvem) + '<div class="txt">' + esc(e.t) + '</div>';
   }
 
   // ================= Backup =================
@@ -1018,7 +1687,7 @@
     try { j = JSON.parse(await arq.text()); } catch (e) { toast('Arquivo inválido: não é um backup do Espaço Nave.'); return; }
     if (!j || j.app !== 'espaco-nave' || !j.dados) { toast('Arquivo inválido: não é um backup do Espaço Nave.'); return; }
     const tabs = TABELAS_LOCAIS.filter(t => j.dados[t] && typeof j.dados[t] === 'object');
-    const nomes = { ingredientes: 'ingredientes', receitas: 'receitas', config: 'configurações' };
+    const nomes = { ingredientes: 'ingredientes', receitas: 'receitas', config: 'configurações', clientes: 'clientes', pedidos: 'pedidos' };
     const partes = tabs.map(t => t === 'config' ? 'as configurações' : Object.values(j.dados[t]).filter(r => r && !r.excluidoEm).length + ' ' + nomes[t]);
     const ok = await confirmar('Substituir os dados?', 'O arquivo traz ' + partes.join(', ') + '. Isso vai substituir ' + tabs.map(t => nomes[t]).join(' e ') + ' que estão no app' + (S.meta.modo === 'planilha' ? ' e na planilha' : '') + '; o que não estiver no arquivo será excluído.', 'Substituir dados', true);
     if (!ok) return;
@@ -1053,7 +1722,7 @@
       if (S.editor.sujo && !salvarReceita()) return;
       const c = clone(S.editor.d); c.id = uid(); c.nome = c.nome + ' (cópia)'; delete c.criadoEm; delete c.atualizadoEm;
       (c.variacoes || []).forEach(v => { v.id = uid(); });
-      S.editor = { idRota: 'nova', nova: true, d: c, sujo: true };
+      S.editor = { tipo: 'receita', idRota: 'nova', nova: true, d: c, sujo: true };
       ignorarHash = true; location.hash = '#/receita/nova'; render(true);
       toast('Cópia criada. Ajuste e salve.');
     },
@@ -1061,6 +1730,8 @@
       const r = S.editor.d;
       const usam = lista('receitas').filter(x => x.id !== r.id && (x.itens || []).some(it => it.tipo === 'rec' && it.refId === r.id));
       if (usam.length) { toast('Esta receita é usada em: ' + usam.map(x => x.nome).join(', ') + '. Tire-a de lá antes de excluir.'); return; }
+      const emPedidos = lista('pedidos').filter(p => ['orcamento', 'confirmado', 'producao', 'pronto'].includes(p.status) && (p.itens || []).some(it => it.tipo === 'rec' && it.receitaId === r.id));
+      if (emPedidos.length) { toast('Esta receita está em ' + emPedidos.length + (emPedidos.length === 1 ? ' pedido em aberto' : ' pedidos em aberto') + '. Conclua ou tire dos pedidos antes de excluir.'); return; }
       if (await confirmar('Excluir receita?', 'Excluir <b>' + esc(r.nome) + '</b>. As outras receitas não são afetadas.', 'Excluir receita', true)) {
         excluirRegistro('receitas', r.id); S.editor = null; toast('Receita excluída.'); ir('#/receitas');
       }
@@ -1090,13 +1761,13 @@
       const pend = S.fila.length;
       const txt = 'O app volta para a tela inicial e apaga a cópia local. Os dados continuam na planilha.' + (pend ? ' <b>Atenção: ' + pend + ' alterações ainda não foram enviadas e serão perdidas.</b>' : '');
       if (!await confirmar('Esquecer este aparelho?', txt, 'Esquecer aparelho', true)) return;
-      S.dados = { ingredientes: {}, receitas: {}, config: {} }; S.fila = []; lsGravar('diario', []);
+      S.dados = dadosVazios(); S.fila = []; lsGravar('diario', []);
       S.meta = { modo: null, url: '', pin: '', ultimaSync: '', conflitos: [], tema: S.meta.tema, fonte: S.meta.fonte };
       salvarLocal(); await gravarJa(); location.hash = '#/inicio'; render(true);
     },
     'apagar-teste': async function () {
       if (!await confirmar('Apagar dados deste aparelho?', 'Apaga tudo o que foi cadastrado no modo de teste. Não dá para desfazer.', 'Apagar dados', true)) return;
-      S.dados = { ingredientes: {}, receitas: {}, config: {} }; S.fila = []; lsGravar('diario', []);
+      S.dados = dadosVazios(); S.fila = []; lsGravar('diario', []);
       S.meta.modo = null; salvarLocal(); await gravarJa(); location.hash = '#/inicio'; render(true);
     },
     'ver-conflito': function (el) {
@@ -1112,6 +1783,7 @@
     },
     'dispensar-conflito': function (el) { S.meta.conflitos = S.meta.conflitos.filter(x => x.id !== el.dataset.id); salvarLocal(); render(false); }
   };
+  Object.assign(ACOES, ACOES_PED);
   function resumoDiferencas(a, b) {
     a = a || {}; b = b || {};
     const ks = Array.from(new Set(Object.keys(a).concat(Object.keys(b)))).filter(k => !/Em$|^id$|^historico$/.test(k));
@@ -1149,7 +1821,7 @@
   async function iniciar() {
     await Local.abrir();
     const [d, f, m] = await Promise.all([Local.ler('dados'), Local.ler('fila'), Local.ler('meta')]);
-    if (d) { S.dados = Object.assign({ ingredientes: {}, receitas: {}, config: {} }, d); }
+    if (d) { S.dados = Object.assign(dadosVazios(), d); }
     if (Array.isArray(f)) S.fila = f;
     if (m) S.meta = Object.assign(S.meta, m);
     const mRapida = lsLer('meta');

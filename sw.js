@@ -1,6 +1,6 @@
 /* Espaço Nave — service worker: abre o app sem internet */
-const VERSAO = 'espaco-nave-v1.0.0';
-const CASCA = ['./', './index.html', './app.js', './calc.js', './manifest.webmanifest', './icons/icone.svg', './icons/icon-192.png', './icons/icon-512.png'];
+const VERSAO = 'espaco-nave-v2.0.0';
+const CASCA = ['./', './index.html', './app.js', './calc.js', './manifest.webmanifest', './icons/logo-selo.png', './icons/logo-estrela.png', './icons/favicon-64.png', './icons/apple-touch-icon.png', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSAO).then(c => c.addAll(CASCA)).then(() => self.skipWaiting()));
