@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const C = window.Calc;
-  const VERSAO = '5.3.0';
+  const VERSAO = '5.4.0';
   const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos', 'lancamentos', 'estoque', 'contasPagar', 'recorrencias'];
   function dadosVazios() { const d = {}; TABELAS_LOCAIS.forEach(t => { d[t] = {}; }); return d; }
 
@@ -348,6 +348,7 @@
   window.addEventListener('beforeunload', function (e) { if (S.editor && S.editor.sujo) { e.preventDefault(); e.returnValue = ''; } });
 
   function secaoAtiva(h) {
+    if (/^#\/lancamento\/[^?]*\?(.*&)?(compra=1|de=compras)/.test(h)) return '#/pedidos'; // compra aberta pela Loja
     const r = h.split('?')[0].replace(/^(#\/[^#]*)#.*$/, '$1');
     if (r.startsWith('#/receita') || r === '#/ingredientes') return '#/receitas';
     if (r.startsWith('#/pedido') || ['#/agenda', '#/producao', '#/compras', '#/importar-compras', '#/estoque', '#/contagem'].includes(r)) return '#/pedidos';
@@ -396,6 +397,7 @@
       case 'producao': html = telaProducao(); break;
       case 'importar-compras': html = telaImportarCompras(); break;
       case 'compras':
+        if (q.get('v') === 'feitas') { html = telaComprasFeitas(); break; }
         if (q.get('de') && q.get('ate')) S.compras = Object.assign(S.compras || { orc: false }, { de: q.get('de'), ate: q.get('ate') });
         html = telaCompras(); break;
       case 'caixa': html = telaCaixa(); break;
@@ -1525,7 +1527,7 @@
     const peds = lista('pedidos').filter(p => sts.includes(p.status) && p.dataEntrega && p.dataEntrega >= F.de && p.dataEntrega <= F.ate);
     const nx = C.necessidades(peds, ctxCalc());
     const comEstoque = modoEstoque() !== 'desligado';
-    let h = cab('Lista de compras', 'Ingredientes para os pedidos do período, com receitas dentro de receitas já desmontadas e a perda de cada uma.') + abas(ABAS_PED, '#/compras') + blocoImportarCompras();
+    let h = cab('Lista de compras', 'Ingredientes para os pedidos do período, com receitas dentro de receitas já desmontadas e a perda de cada uma.') + abas(ABAS_PED, '#/compras') + segCompras('lista');
     h += '<section class="bloco"><div class="linha-campos"><label class="campo"><span>De</span><input class="entrada" type="date" data-compras="de" value="' + F.de + '"></label><label class="campo"><span>Até</span><input class="entrada" type="date" data-compras="ate" value="' + F.ate + '"></label></div>' +
       '<div class="acoes" style="margin-top:10px"><button type="button" class="btn sec fino" data-acao="compras-periodo" data-v="7">Próximos 7 dias</button><button type="button" class="btn sec fino" data-acao="compras-periodo" data-v="1">Só amanhã</button></div>' +
       '<label class="chave" style="margin-top:6px"><span class="rot">Incluir orçamentos<small>Para já ter noção, antes de o cliente confirmar</small></span><input type="checkbox" data-compras="orc"' + (F.orc ? ' checked' : '') + '></label></section>';
@@ -1779,6 +1781,10 @@
 
   // ---------- Editor de lançamento ----------
   function novoLancamento(q) {
+    if (q && q.get('compra')) {
+      return { id: uid(), tipo: 'saida', data: hoje(), valor: null, descricao: '', categoria: fonteCanonica('Ingredientes', 'saida'), forma: 'pix', obs: '',
+        itensCompra: [{ id: uid(), ingredienteId: '', embalagens: 1, qtdEmbalagem: null, unidade: 'g', valor: null }], outros: null };
+    }
     return { id: uid(), tipo: q && q.get('tipo') === 'saida' ? 'saida' : 'entrada', data: hoje(), valor: null, descricao: '', categoria: (q && q.get('categoria')) || '', forma: 'pix', obs: '', itensCompra: [], outros: null };
   }
   function telaEditorLancamento(id, q) {
@@ -1788,7 +1794,8 @@
       else if (S.dados.lancamentos[id] && !S.dados.lancamentos[id].excluidoEm) d = clone(S.dados.lancamentos[id]);
       else return '<div class="bloco vazio">' + I.emblema + '<h2>Lançamento não encontrado</h2><p>Ele pode ter sido excluído em outro aparelho.</p><a class="btn" href="#/caixa">Ver caixa</a></div>';
       d.itensCompra = d.itensCompra || [];
-      S.editor = { tipo: 'lancamento', idRota: id, nova: id === 'novo', d: d, sujo: false };
+      const deCompras = !!(q && (q.get('compra') || q.get('de') === 'compras'));
+      S.editor = { tipo: 'lancamento', idRota: id, nova: id === 'novo', d: d, sujo: false, compra: deCompras, voltar: deCompras ? '#/compras?v=feitas' : '#/caixa' };
     }
     return htmlEditorLancamento();
   }
@@ -1799,7 +1806,9 @@
   function htmlEditorLancamento() {
     const e = S.editor, l = e.d, ent = l.tipo === 'entrada';
     const ings = lista('ingredientes').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-    let h = '<div class="cab-pagina"><div class="titulos"><a href="#/caixa" class="link-btn voltar">' + I.voltar + 'Caixa</a><h1>' + (e.nova ? (ent ? 'Nova entrada' : 'Nova saída') : (ent ? 'Entrada' : 'Saída')) + '</h1></div></div>';
+    const titulo = e.compra ? (e.nova ? 'Nova compra' : 'Compra') : (e.nova ? (ent ? 'Nova entrada' : 'Nova saída') : (ent ? 'Entrada' : 'Saída'));
+    let h = '<div class="cab-pagina"><div class="titulos"><a href="' + e.voltar + '" class="link-btn voltar">' + I.voltar + (e.compra ? 'Compras feitas' : 'Caixa') + '</a><h1>' + titulo + '</h1>' +
+      (e.compra && e.nova ? '<p class="sub">Marque os ingredientes comprados: o preço e o histórico de cada um se atualizam, e a compra entra no Caixa como saída.</p>' : '') + '</div></div>';
     h += '<div class="form-lanc">';
     h += '<section class="bloco">' + (e.nova && !l.itensCompra.length ? '<div class="seg" role="group" aria-label="Tipo"><button type="button" data-acao="lanc-tipo" data-v="entrada" aria-pressed="' + ent + '">Entrada</button><button type="button" data-acao="lanc-tipo" data-v="saida" aria-pressed="' + !ent + '">Saída</button></div>' : '') +
       '<div class="grade" style="margin-top:14px"><label class="campo"><span>Data</span><input class="entrada" type="date" data-c="data" value="' + esc(l.data) + '"></label>' +
@@ -1812,7 +1821,7 @@
         l.itensCompra.map(function (it, i) {
           const ing = S.dados.ingredientes[it.ingredienteId];
           return '<div class="linha-edit linha-compra">' +
-            '<label class="campo nome-av"><span>Ingrediente</span><select class="entrada" data-c="itensCompra.' + i + '.ingredienteId"><option value="">Escolha…</option>' + ings.map(x => '<option value="' + esc(x.id) + '"' + (x.id === it.ingredienteId ? ' selected' : '') + '>' + esc(x.nome) + '</option>').join('') + (ing && ing.excluidoEm ? '<option value="' + esc(ing.id) + '" selected>' + esc(ing.nome) + ' (excluído)</option>' : '') + '</select></label>' +
+            '<label class="campo nome-av"><span>Ingrediente</span><select class="entrada" data-c="itensCompra.' + i + '.ingredienteId"><option value="">Escolha…</option><option value="__novo__">+ Cadastrar ingrediente novo…</option>' + ings.map(x => '<option value="' + esc(x.id) + '"' + (x.id === it.ingredienteId ? ' selected' : '') + '>' + esc(x.nome) + '</option>').join('') + (ing && ing.excluidoEm ? '<option value="' + esc(ing.id) + '" selected>' + esc(ing.nome) + ' (excluído)</option>' : '') + '</select></label>' +
             '<label class="campo"><span>Embalagens</span><input class="entrada num" data-c="itensCompra.' + i + '.embalagens" data-n inputmode="decimal" value="' + inNum(it.embalagens) + '"></label>' +
             '<div class="campo"><span>Tamanho de cada</span><div class="qtd" style="display:flex;gap:6px"><input class="entrada num" data-c="itensCompra.' + i + '.qtdEmbalagem" data-n inputmode="decimal" value="' + inNum(it.qtdEmbalagem) + '" aria-label="Tamanho da embalagem"><select class="entrada" data-c="itensCompra.' + i + '.unidade" style="flex:0 0 78px" aria-label="Unidade">' + opcoesUn(ing ? ing.unidade : null, it.unidade) + '</select></div></div>' +
             (modoEstoque() === 'completo' ? '<label class="campo"><span>Validade</span><input class="entrada" type="date" data-c="itensCompra.' + i + '.validade" value="' + esc(it.validade || '') + '"></label>' : '') +
@@ -1828,7 +1837,7 @@
       '<label class="campo" style="margin-top:14px"><span>Observações</span><textarea class="entrada" data-c="obs" placeholder="Opcional">' + esc(l.obs || '') + '</textarea></label></section>';
     h += '<div class="barra-salvar"><span class="estado" id="estado-lanc"></span>' +
       (!e.nova ? '<button type="button" class="btn perigo fino" data-acao="excluir-lanc" aria-label="Excluir lançamento" title="Excluir lançamento">' + I.lixo + '<span>Excluir</span></button>' : '') +
-      '<button type="button" class="btn" data-acao="salvar-lanc">Salvar ' + (ent ? 'entrada' : 'saída') + '</button></div></div>';
+      '<button type="button" class="btn" data-acao="salvar-lanc">Salvar ' + (e.compra ? 'compra' : ent ? 'entrada' : 'saída') + '</button></div></div>';
     return h;
   }
   function montarEditorLancamento() {
@@ -1844,6 +1853,18 @@
     gravarCaminho(e.d, cam, el.hasAttribute('data-n') ? C.lerNum(el.value) : el.value);
     marcarSujo();
     const m = cam.match(/^itensCompra\.(\d+)\.ingredienteId$/);
+    if (m && el.value === '__novo__') {
+      const idx = +m[1], it = e.d.itensCompra[idx];
+      it.ingredienteId = ''; render(false);
+      folhaIngrediente(null, function (ing) {
+        const ed = S.editor; if (!ed || ed.tipo !== 'lancamento') return;
+        const alvo = ed.d.itensCompra[idx]; if (!alvo) return;
+        alvo.ingredienteId = ing.id; alvo.qtdEmbalagem = ing.qtdEmbalagem; alvo.unidade = C.normUn(ing.unidade);
+        marcarSujo(); render(false);
+        setTimeout(() => { const v = $('[data-c="itensCompra.' + idx + '.valor"]'); if (v) v.focus(); }, 50);
+      });
+      return;
+    }
     if (m) {
       const it = e.d.itensCompra[+m[1]], ing = S.dados.ingredientes[it.ingredienteId];
       if (ing) { it.qtdEmbalagem = ing.qtdEmbalagem; it.unidade = C.normUn(ing.unidade); }
@@ -1868,7 +1889,7 @@
     const tot = totalLancamento(l);
     const t = $('#total-lanc'); if (t) t.textContent = C.brl(tot || 0);
     const est = $('#estado-lanc');
-    if (est) est.innerHTML = '<b style="color:var(--ink)">' + (C.numOk(tot) ? (l.tipo === 'entrada' ? '+ ' : '− ') + C.brl(tot) : 'Sem valor') + '</b><br>' + (e.sujo ? 'Alterações não salvas' : (e.nova ? 'Novo lançamento' : 'Tudo salvo'));
+    if (est) est.innerHTML = '<b style="color:var(--ink)">' + (C.numOk(tot) ? (l.tipo === 'entrada' ? '+ ' : '− ') + C.brl(tot) : 'Sem valor') + '</b><br>' + (e.sujo ? 'Alterações não salvas' : (e.nova ? (e.compra ? 'Nova compra' : 'Novo lançamento') : 'Tudo salvo'));
   }
   function validarLancamento(l) {
     if (!l.data) return 'Informe a data.';
@@ -1917,16 +1938,16 @@
     Object.values(trabalho).forEach(ing => gravarRegistro('ingredientes', ing));
     gravarRegistro('lancamentos', clone(l));
     aplicarEstoqueCompra(l);
-    const eraNovo = e.nova;
+    const eraNovo = e.nova, destino = e.voltar || '#/caixa', eraCompra = e.compra;
     S.editor = null;
-    let msg = (l.tipo === 'entrada' ? 'Entrada ' : 'Saída ') + (eraNovo ? 'registrada.' : 'salva.');
+    let msg = eraCompra ? (eraNovo ? 'Compra registrada.' : 'Compra salva.') : (l.tipo === 'entrada' ? 'Entrada ' : 'Saída ') + (eraNovo ? 'registrada.' : 'salva.');
     if (mudancas.length) msg += ' Preço atualizado: ' + mudancas.join(', ') + '.';
     const alerta = (cfg().margemAlerta || 0) / 100, ctx = ctxCalc();
     const ruins = new Set();
     Object.keys(trabalho).forEach(id => receitasAfetadas(id).forEach(r => { if ((C.calcularReceita(r, ctx).variacoes || []).some(v => v.prejuizo || (C.numOk(v.margemReal) && v.margemReal < alerta))) ruins.add(r.id); }));
     if (ruins.size) toast(msg + ' ' + (ruins.size === 1 ? '1 receita ficou' : ruins.size + ' receitas ficaram') + ' com margem abaixo do mínimo.', 'Ver', () => ir('#/inicio'));
     else toast(msg);
-    ir('#/caixa');
+    ir(destino);
     return true;
   }
 
@@ -1979,7 +2000,8 @@
         const r = C.removerCompra(ing, orig.id + ':' + it.id); if (r) gravarRegistro('ingredientes', r);
       });
       aplicarEstoqueCompra(orig, true); removerMovsRef('venda:' + orig.id);
-      excluirRegistro('lancamentos', orig.id); S.editor = null; toast('Lançamento excluído.' + (orig.vitrine ? ' A quantidade volta para a vitrine.' : '')); ir('#/caixa');
+      const destino = (S.editor && S.editor.voltar) || '#/caixa';
+      excluirRegistro('lancamentos', orig.id); S.editor = null; ir(destino); toast('Lançamento excluído.' + (orig.vitrine ? ' A quantidade volta para a vitrine.' : ''));
     }
   };
   document.addEventListener('toggle', function (e) {
@@ -2750,8 +2772,33 @@
 
   // ================= Importar compras de um arquivo CSV =================
   function jaImportada(g) { const l = S.dados.lancamentos[g.id]; return !!(l && !l.excluidoEm); }
+  function segCompras(ativa) {
+    return '<div class="seg" role="group" aria-label="Parte da aba Compras" style="margin-bottom:14px"><a href="#/compras"' + (ativa === 'lista' ? ' aria-current="true"' : '') + '>Lista de compras</a><a href="#/compras?v=feitas"' + (ativa === 'feitas' ? ' aria-current="true"' : '') + '>Compras feitas</a></div>';
+  }
+  function comprasRegistradas() {
+    return lista('lancamentos').filter(l => l.tipo === 'saida' && ((l.itensCompra || []).length || C.semAcento(l.categoria) === 'ingredientes'))
+      .sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(b.atualizadoEm || '').localeCompare(String(a.atualizadoEm || '')));
+  }
+  function telaComprasFeitas() {
+    let h = cab('Compras feitas', 'Registre o que comprou: à mão ou por uma planilha do Excel. O preço dos ingredientes se atualiza sozinho.',
+      '<a class="btn" href="#/lancamento/novo?compra=1">' + I.mais + 'Nova compra</a>') + abas(ABAS_PED, '#/compras') + segCompras('feitas');
+    h += blocoImportarCompras();
+    const todas = comprasRegistradas(), mes = hoje().slice(0, 7);
+    const doMes = todas.filter(l => String(l.data).slice(0, 7) === mes), totMes = doMes.reduce((s, l) => s + (l.valor || 0), 0);
+    const recentes = todas.filter(l => l.data >= C.somarDias(hoje(), -60));
+    if (!todas.length) return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhuma compra registrada</h2><p>Registre as compras de ingredientes para o app manter os preços atualizados e, no modo completo, o estoque.</p><a class="btn" href="#/lancamento/novo?compra=1">' + I.mais + 'Registrar a primeira compra</a></div>';
+    h += '<div class="stats stats-cx" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="stat"><div class="r">Compras em ' + esc(C.nomeMes(mes).split(' ')[0]) + '</div><div class="n">' + C.brl(totMes) + '</div></div><div class="stat" style="grid-column:auto"><div class="r">Quantidade</div><div class="n">' + doMes.length + '</div></div></div>';
+    h += '<section class="bloco"><div class="cab-bloco"><h2>Últimos 60 dias</h2><button type="button" class="link-btn" data-acao="compras-no-caixa">Ver todas no Caixa</button></div>' +
+      (recentes.length ? '<div class="lista">' + recentes.map(function (l) {
+        const its = (l.itensCompra || []).map(it => (S.dados.ingredientes[it.ingredienteId] || {}).nome).filter(Boolean);
+        return '<a class="item" href="#/lancamento/' + encodeURIComponent(l.id) + '?de=compras"><div class="principal"><div class="nome">' + esc(l.descricao || 'Compra') + '</div><div class="det">' + esc(dataCurta(l.data)) + (l.forma ? ', ' + esc(formaTxt(l.forma)) : '') + '</div>' +
+          (its.length ? '<div class="det">' + esc(its.slice(0, 3).join(', ') + (its.length > 3 ? ' e mais ' + (its.length - 3) : '')) + '</div>' : '') + '</div>' +
+          '<div class="valor">' + C.brl(l.valor) + '</div>' + (l.importado ? '<div class="chips"><span class="chip mudo">importada do Excel</span></div>' : '') + '</a>';
+      }).join('') + '</div>' : '<p class="mudo">Nenhuma compra nos últimos 60 dias.</p>') + '</section>';
+    return h;
+  }
   function blocoImportarCompras() {
-    return '<section class="bloco barra-import"><div class="txt-import"><b>Já fez as compras?</b><small>Registre várias de uma vez por planilha: baixe o modelo, preencha no Excel ou no Google Planilhas e importe aqui. O preço dos ingredientes se atualiza sozinho.</small></div>' +
+    return '<section class="bloco barra-import"><div class="txt-import"><b>Muitas compras de uma vez?</b><small>Baixe o modelo, preencha no Excel ou no Google Planilhas e importe aqui.</small></div>' +
       '<div class="acoes"><button type="button" class="btn sec fino" data-acao="modelo-compras">' + I.baixar + 'Baixar modelo</button><label class="btn fino" style="cursor:pointer">' + I.enviar + 'Importar compras<input type="file" accept=".csv,text/csv,text/plain" id="arq-compras" hidden></label></div></section>';
   }
   async function lerArquivoTexto(arq) {
@@ -2761,8 +2808,8 @@
   }
   function telaImportarCompras() {
     const im = S.importacao;
-    let h = '<div class="cab-pagina"><div class="titulos"><a href="#/compras" class="link-btn voltar">' + I.voltar + 'Compras</a><h1>Importar compras</h1>' + (im ? '<p class="sub">' + esc(im.nome) + '</p>' : '') + '</div></div>';
-    if (!im) return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhum arquivo aberto</h2><p>Volte para Compras e escolha o arquivo.</p><a class="btn" href="#/compras">Ir para Compras</a></div>';
+    let h = '<div class="cab-pagina"><div class="titulos"><a href="#/compras?v=feitas" class="link-btn voltar">' + I.voltar + 'Compras feitas</a><h1>Importar compras</h1>' + (im ? '<p class="sub">' + esc(im.nome) + '</p>' : '') + '</div></div>';
+    if (!im) return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhum arquivo aberto</h2><p>Volte para Compras feitas e escolha o arquivo.</p><a class="btn" href="#/compras?v=feitas">Ir para Compras feitas</a></div>';
     const res = C.interpretarCompras(im.csv, S.dados.ingredientes, im.padroes, im.resolucoes);
     if (res.semCabecalho) return h + '<div class="aviso neg">' + I.alerta + '<div class="txt">Não encontrei as colunas de ingrediente e valor neste arquivo. Use o modelo: ele já vem com as colunas certas.<br><button type="button" class="link-btn" data-acao="modelo-compras">Baixar modelo</button></div></div>';
     const novas = res.grupos.filter(g => g.ok && !jaImportada(g)), ja = res.grupos.filter(g => g.ok && jaImportada(g)), erradas = res.grupos.filter(g => !g.ok);
@@ -2857,7 +2904,7 @@
     toast((grupos.length === 1 ? '1 compra importada' : grupos.length + ' compras importadas') + ' (' + C.brl(total) + ').' +
       (nNovos ? ' ' + (nNovos === 1 ? '1 ingrediente novo.' : nNovos + ' ingredientes novos.') : '') +
       (mud.length ? ' Preços: ' + mud.slice(0, 3).map(x => x.nome + ' ' + (x.v > 0 ? '+' : '−') + C.pct(Math.abs(x.v))).join(', ') + (mud.length > 3 ? ' e mais ' + (mud.length - 3) : '') + '.' : ''), 'Ver no Caixa', () => ir('#/caixa'), 10000);
-    ir('#/compras');
+    ir('#/compras?v=feitas');
   }
   const ACOES_IMPORT = {
     'modelo-compras': function () {
@@ -2867,7 +2914,12 @@
       toast('Modelo baixado. Preencha as linhas do que comprou; as outras podem ficar em branco.');
     },
     'importar-compras-ok': executarImportacao,
-    'importar-cancelar': function () { S.importacao = null; ir('#/compras'); }
+    'importar-cancelar': function () { S.importacao = null; ir('#/compras?v=feitas'); },
+    'compras-no-caixa': function () {
+      const p = C.periodoPreset('ano', hoje());
+      S.caixa = { preset: 'ano', de: p.de, ate: p.ate, tipo: 'saida', fontes: [fonteCanonica('Ingredientes', 'saida')], busca: '', maisAberto: true };
+      ir('#/caixa');
+    }
   };
   document.addEventListener('change', async function (e) {
     const t = e.target;
