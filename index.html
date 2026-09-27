@@ -595,6 +595,14 @@ h2.titulo-grupo { font-size: calc(24px * var(--fs)); margin: 28px 0 8px; }
 body.com-aviso-versao .toasts { top: calc(env(safe-area-inset-top, 0px) + 136px); }
 @media (min-width: 900px) { body.com-aviso-versao .toasts { top: 140px; } }
 
+
+/* ============ Vitrine: editar e desfazer ============ */
+.link-nome { background: none; border: 0; padding: 0; text-align: left; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; }
+.link-nome:hover { text-decoration: underline; }
+.hist-estoque li { align-items: flex-start; }
+.hist-estoque .hist-origem { display: block; font-size: calc(11.5px * var(--fs)); }
+.hist-estoque .hist-dir { display: inline-flex; align-items: baseline; gap: 2px; white-space: nowrap; }
+
 /* ============ Ajustes finais (ficam por último para valer sobre as regras anteriores) ============ */
 .seg { border-radius: 22px; }
 @media (max-width: 520px) {

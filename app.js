@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const C = window.Calc;
-  const VERSAO = '5.4.0';
+  const VERSAO = '5.4.1';
   const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos', 'lancamentos', 'estoque', 'contasPagar', 'recorrencias'];
   function dadosVazios() { const d = {}; TABELAS_LOCAIS.forEach(t => { d[t] = {}; }); return d; }
 
@@ -2096,8 +2096,8 @@
       if (!itens.length) return h + '<div class="bloco vazio">' + I.emblema + '<h2>Vitrine vazia</h2><p>Registre os doces prontos para pronta-entrega. Ao vender por aqui, a entrada vai sozinha para o Caixa.' + (modo === 'completo' ? ' No modo completo, colocar na vitrine também desconta os ingredientes usados.' : '') + '</p><button type="button" class="btn" data-acao="vitrine-add">' + I.mais + 'Colocar na vitrine</button></div>';
       return h + '<div class="lista">' + itens.map(function (x) {
         const st = C.situacaoEstoque(x, 0, hj, cf.diasAlertaValidade);
-        return '<div class="item"><div class="principal"><div class="nome">' + esc(nomeVitrine(x.item)) + '</div><div class="det">' + (st.negativo ? 'Estoque negativo: confira a contagem' : C.num(x.qtd) + (x.qtd === 1 ? ' unidade' : ' unidades')) + '</div></div>' +
-          '<div class="acoes"><button type="button" class="btn fino" data-acao="vitrine-vender" data-v="' + esc(x.item) + '"' + (x.qtd > 0 ? '' : ' disabled') + '>Vender</button><button type="button" class="btn sec fino" data-acao="vitrine-perda" data-v="' + esc(x.item) + '">Perda</button></div>' +
+        return '<div class="item"><div class="principal"><button type="button" class="nome link-nome" data-acao="vitrine-editar" data-v="' + esc(x.item) + '">' + esc(nomeVitrine(x.item)) + '</button><div class="det">' + (st.negativo ? 'Estoque negativo: confira a contagem' : C.num(x.qtd) + (x.qtd === 1 ? ' unidade' : ' unidades')) + '</div></div>' +
+          '<div class="acoes"><button type="button" class="btn fino" data-acao="vitrine-vender" data-v="' + esc(x.item) + '"' + (x.qtd > 0 ? '' : ' disabled') + '>Vender</button><button type="button" class="btn sec fino" data-acao="vitrine-perda" data-v="' + esc(x.item) + '">Perda</button><button type="button" class="btn sec fino" data-acao="vitrine-editar" data-v="' + esc(x.item) + '">Editar</button></div>' +
           '<div class="chips">' + chipValidade(st) + (st.negativo ? '<span class="chip neg">negativo</span>' : '') + '</div></div>';
       }).join('') + '</div>';
     }
@@ -2147,7 +2147,7 @@
       '<label class="campo"><span>Observação</span><input class="entrada" name="obs" placeholder="Opcional"></label>' +
       '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Fechar</button><button class="btn" type="submit" id="btn-est">Registrar</button></div></form>' +
       '<hr class="separa"><label class="campo"><span>Estoque mínimo</span><div class="linha-campos" style="flex-wrap:nowrap"><input class="entrada num" id="min-est" inputmode="decimal" value="' + inNum(ing.estoqueMinimo) + '" placeholder="sem mínimo"><span class="mudo" style="flex:0 0 auto;align-self:center">' + base + '</span><button type="button" class="btn sec fino" id="salvar-min" style="flex:0 0 auto">Salvar mínimo</button></div><small>Abaixo disso, o app avisa no Início e aqui no Estoque.</small></label>' +
-      (hist.length ? '<div><h3>Últimos registros</h3><ul class="historico">' + hist.map(m => '<li><span>' + dataDia(m.data) + ', ' + esc(C.MOTIVOS_ESTOQUE[m.motivo] || m.motivo) + (m.obs ? ' <small class="mudo">' + esc(m.obs) + '</small>' : '') + '</span><span class="' + (m.qtd < 0 ? 'neg-txt' : 'pos-txt') + '">' + (m.qtd > 0 ? '+' : '−') + C.qtdLegivel(Math.abs(m.qtd), base) + '</span></li>').join('') + '</ul></div>' : '');
+      htmlHistorico(hist, q => C.qtdLegivel(q, base));
     abrirFolha(ing.nome, corpo, function (d) {
       const f = $('#f-est', d);
       function ajustar() {
@@ -2172,6 +2172,7 @@
         else registrarMov(item, delta, acao, m);
         d.close(); toast(acao === 'ajuste' ? 'Contagem registrada.' : acao === 'entrada' ? 'Entrada registrada.' : 'Perda registrada.'); render(false);
       });
+      ligarDesfazer(d);
       $('#salvar-min', d).onclick = function () {
         const v = C.lerNum($('#min-est', d).value);
         const c = clone(S.dados.ingredientes[id]); c.estoqueMinimo = C.numOk(v) && v > 0 ? v : null;
@@ -2199,6 +2200,93 @@
       const n = $$('[data-cont-qtd]').filter(i => i.value.trim() !== '').length;
       $('#estado-cont').textContent = n ? n + (n === 1 ? ' ingrediente preenchido' : ' ingredientes preenchidos') : 'Nada preenchido';
       if (S.editor && S.editor.tipo === 'contagem') S.editor.sujo = n > 0;
+    });
+  }
+
+  // ---------- Registros do estoque: histórico com "desfazer" ----------
+  function podeDesfazer(m) { return !m.ref && ['ajuste', 'entrada', 'perda', 'vitrine'].indexOf(m.motivo) >= 0; }
+  function ondeDesfazer(m) {
+    const r = String(m.ref || '');
+    if (r.startsWith('compra:')) return 'para desfazer, exclua a compra no Caixa';
+    if (r.startsWith('ped:')) return 'volta sozinho se o pedido voltar para confirmado';
+    if (r.startsWith('vit:')) return 'para desfazer, desfaça o registro da vitrine';
+    if (r.startsWith('venda:')) return 'para desfazer, exclua a venda no Caixa';
+    if (r.startsWith('vendaped:')) return 'para desfazer, exclua o pedido do fiado';
+    return '';
+  }
+  function htmlHistorico(movs, fmt) {
+    if (!movs.length) return '';
+    return '<div><h3>Últimos registros</h3><ul class="historico hist-estoque">' + movs.map(function (m) {
+      const qtd = Math.abs(m.qtd) < 1e-9 ? (m.validade ? 'validade ' + dataDia(m.validade) : 'confere') : (m.qtd > 0 ? '+' : '−') + fmt(Math.abs(m.qtd));
+      const origem = !podeDesfazer(m) ? ondeDesfazer(m) : '';
+      return '<li><span>' + dataDia(m.data) + ', ' + esc(C.MOTIVOS_ESTOQUE[m.motivo] || m.motivo) + (m.obs ? ' <small class="mudo">' + esc(m.obs) + '</small>' : '') + (origem ? '<small class="mudo hist-origem">' + esc(origem) + '</small>' : '') + '</span>' +
+        '<span class="hist-dir"><b class="' + (m.qtd < 0 ? 'neg-txt' : m.qtd > 0 ? 'pos-txt' : '') + '">' + qtd + '</b>' + (podeDesfazer(m) ? '<button type="button" class="link-btn mini" data-desfazer="' + esc(m.id) + '" aria-label="Desfazer este registro">desfazer</button>' : '') + '</span></li>';
+    }).join('') + '</ul></div>';
+  }
+  function ligarDesfazer(d, depois) {
+    $$('[data-desfazer]', d).forEach(b => b.onclick = async function () {
+      const m = S.dados.estoque[b.dataset.desfazer]; if (!m) return;
+      const baixa = movsEstoque().filter(x => x.ref === 'vit:' + m.id);
+      d.close();
+      const ok = await confirmar('Desfazer registro?', 'Desfazer "' + esc(C.MOTIVOS_ESTOQUE[m.motivo] || m.motivo) + '" de ' + dataDia(m.data) + '.' + (baixa.length ? ' Os ingredientes descontados ao fazer esses doces voltam para o estoque.' : ''), 'Desfazer', true);
+      if (ok) { excluirRegistro('estoque', m.id); removerMovsRef('vit:' + m.id); toast('Registro desfeito.'); render(false); }
+      if (depois) depois();
+    });
+  }
+  // Colocar na vitrine (no modo completo, desconta os ingredientes usados)
+  function colocarNaVitrine(chave, n, validade, obs) {
+    const [, rid, vid] = chave.split(':');
+    const m = registrarMov(chave, n, 'vitrine', { validade: validade || '', obs: obs || '' });
+    if (modoEstoque() === 'completo' && m) {
+      const bx = C.baixaDoPedido({ itens: [{ tipo: 'rec', receitaId: rid, variacaoId: vid, qtd: n }] }, ctxCalc());
+      Object.keys(bx).forEach(id => registrarMov(C.chaveIng(id), -bx[id], 'producao', { ref: 'vit:' + m.id, obs: 'Vitrine: ' + nomeVitrine(chave) }));
+    }
+    return m;
+  }
+  function folhaItemVitrine(item, acaoInicial) {
+    const sd = saldos()[item], st = C.situacaoEstoque(sd, 0, hoje(), cfg().diasAlertaValidade);
+    const hist = movsEstoque().filter(m => m.item === item).sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(b.criadoEm || '').localeCompare(String(a.criadoEm || ''))).slice(0, 10);
+    let acao = acaoInicial || 'ajuste';
+    const un = q => C.num(q) + (q === 1 ? ' un' : ' un');
+    const corpo = '<div class="stats" style="margin:0"><div class="stat"><div class="r">Na vitrine</div><div class="n' + (st.negativo ? ' neg-txt' : '') + '">' + (sd ? C.num(st.qtd) : '0') + '</div></div><div class="stat"><div class="r">Validade</div><div class="n" style="font-size:18px">' + (st.validade ? dataDia(st.validade) : '—') + '</div></div></div>' +
+      '<div class="seg" role="group" aria-label="O que registrar">' + [['ajuste', 'Contagem'], ['vitrine', 'Colocar mais'], ['perda', 'Perda']].map(x => '<button type="button" data-ac="' + x[0] + '" aria-pressed="' + (x[0] === acao) + '">' + x[1] + '</button>').join('') + '</div>' +
+      '<form id="f-itvit" style="display:flex;flex-direction:column;gap:12px"><p class="mudo" id="exp-itvit"></p>' +
+      '<label class="campo"><span id="rot-itvit">Quantas tem agora</span><input class="entrada num" name="qtd" inputmode="decimal" required></label>' +
+      '<label class="campo" id="val-itvit"><span>Validade</span><input class="entrada" type="date" name="validade" value="' + esc(st.validade || '') + '"><small id="dica-val"></small></label>' +
+      '<label class="campo"><span>Observação</span><input class="entrada" name="obs" placeholder="Opcional"></label>' +
+      '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Fechar</button><button class="btn" type="submit" id="btn-itvit">Registrar</button></div></form>' +
+      htmlHistorico(hist, un);
+    abrirFolha(nomeVitrine(item), corpo, function (d) {
+      const f = $('#f-itvit', d);
+      function ajustar() {
+        $$('[data-ac]', d).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ac === acao)));
+        $('#rot-itvit', d).textContent = acao === 'ajuste' ? 'Quantas tem agora' : acao === 'vitrine' ? 'Quantas colocou' : 'Quantas perdeu';
+        $('#exp-itvit', d).textContent = acao === 'ajuste' ? 'Conte o que está na vitrine. Use também para mudar a validade (mantenha a quantidade) ou para zerar o item.' :
+          acao === 'vitrine' ? 'Unidades novas que você fez para a vitrine.' + (modoEstoque() === 'completo' ? ' Os ingredientes usados saem do estoque.' : '') : 'Venceu, quebrou, foi para degustação.';
+        $('#val-itvit', d).hidden = acao === 'perda';
+        $('#dica-val', d).textContent = acao === 'ajuste' ? 'A validade do que está na vitrine agora.' : acao === 'vitrine' ? 'A validade destas unidades novas.' : '';
+        if (acao === 'ajuste' && f.qtd.value === '' && sd) f.qtd.value = inNum(Math.max(0, st.qtd));
+        if (acao !== 'ajuste' && sd && f.qtd.value === inNum(Math.max(0, st.qtd))) f.qtd.value = '';
+        $('#btn-itvit', d).textContent = acao === 'ajuste' ? 'Registrar contagem' : acao === 'vitrine' ? 'Colocar na vitrine' : 'Registrar perda';
+      }
+      $$('[data-ac]', d).forEach(b => b.onclick = () => { acao = b.dataset.ac; ajustar(); });
+      ajustar();
+      f.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const n = C.lerNum(f.qtd.value), atual = sd ? sd.qtd : 0;
+        if (!C.numOk(n) || n < 0 || (acao !== 'ajuste' && n === 0)) { toast('Informe uma quantidade válida.'); return; }
+        const validade = acao === 'perda' ? '' : f.validade.value, obs = f.obs.value.trim();
+        if (acao === 'ajuste') {
+          const delta = n - atual, mudouValidade = validade && validade !== (st.validade || '');
+          if (Math.abs(delta) < 1e-9 && !mudouValidade) { d.close(); toast('A contagem confere com a vitrine.'); return; }
+          if (Math.abs(delta) < 1e-9) gravarRegistro('estoque', { id: uid(), item: item, nome: nomeVitrine(item), qtd: 0, motivo: 'ajuste', data: hoje(), ref: '', validade: validade, obs: obs });
+          else registrarMov(item, delta, 'ajuste', { validade: validade, obs: obs });
+          toast(Math.abs(delta) < 1e-9 ? 'Validade atualizada.' : n === 0 ? 'Item zerado na vitrine.' : 'Contagem registrada.');
+        } else if (acao === 'vitrine') { colocarNaVitrine(item, n, validade, obs); toast('Colocado na vitrine.'); }
+        else { registrarMov(item, -n, 'perda', { obs: obs }); toast('Perda registrada.'); }
+        d.close(); render(false);
+      });
+      ligarDesfazer(d);
     });
   }
   function folhaVitrine(modo, item) {
@@ -2238,11 +2326,7 @@
         if (!(n > 0)) { toast('Informe a quantidade.'); return; }
         if (modo === 'add') {
           const o = ops[+f.prod.value], chave = C.chaveVitrine(o.r.id, o.v.id);
-          const m = registrarMov(chave, n, 'vitrine', { validade: f.validade.value });
-          if (modoEstoque() === 'completo' && m) {
-            const bx = C.baixaDoPedido({ itens: [{ tipo: 'rec', receitaId: o.r.id, variacaoId: o.v.id, qtd: n }] }, ctx);
-            Object.keys(bx).forEach(id => registrarMov(C.chaveIng(id), -bx[id], 'producao', { ref: 'vit:' + m.id, obs: 'Vitrine: ' + nomeVitrine(chave) }));
-          }
+          colocarNaVitrine(chave, n, f.validade.value, '');
           toast('Colocado na vitrine.');
         } else if (modo === 'vender') {
           const pu = C.lerNum(f.preco.value);
@@ -2300,6 +2384,7 @@
     'vitrine-add': function () { folhaVitrine('add'); },
     'vitrine-vender': function (el) { folhaVitrine('vender', el.dataset.v); },
     'vitrine-perda': function (el) { folhaVitrine('perda', el.dataset.v); },
+    'vitrine-editar': function (el) { folhaItemVitrine(el.dataset.v); },
     'salvar-contagem': function () {
       const data = ($('#data-cont') || {}).value || hoje();
       const sd = saldos(); let n = 0;
