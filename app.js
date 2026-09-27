@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const C = window.Calc;
-  const VERSAO = '5.0.0';
+  const VERSAO = '5.1.0';
   const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos', 'lancamentos', 'estoque', 'contasPagar', 'recorrencias'];
   function dadosVazios() { const d = {}; TABELAS_LOCAIS.forEach(t => { d[t] = {}; }); return d; }
 
@@ -329,7 +329,7 @@
     if (r.startsWith('#/receita') || r === '#/ingredientes') return '#/receitas';
     if (r.startsWith('#/pedido') || ['#/agenda', '#/producao', '#/compras', '#/estoque', '#/contagem'].includes(r)) return '#/pedidos';
     if (r.startsWith('#/cliente')) return '#/clientes';
-    if (r === '#/caixa' || r.startsWith('#/lancamento') || ['#/contas', '#/receber', '#/reserva', '#/relatorios'].includes(r)) return '#/caixa';
+    if (r === '#/caixa' || r.startsWith('#/lancamento') || ['#/contas', '#/receber', '#/reserva', '#/prolabore', '#/relatorios'].includes(r)) return '#/caixa';
     return NAV.some(n => n.h === r) ? r : '#/inicio';
   }
 
@@ -377,7 +377,7 @@
       case 'caixa': html = telaCaixa(); break;
       case 'contas': html = telaContas(); break;
       case 'receber': html = telaReceber(); break;
-      case 'reserva': html = telaReserva(); break;
+      case 'reserva': case 'prolabore': html = telaProLabore(); break;
       case 'relatorios': html = telaRelatorios(); break;
       case 'estoque': html = telaEstoque(q); break;
       case 'contagem': html = telaContagem(); break;
@@ -480,7 +480,7 @@
     }
 
     h += '<div class="stats"><a class="stat" href="#/receitas" style="text-decoration:none"><div class="n">' + nRec + '</div><div class="r">receitas cadastradas</div></a>' +
-      '<a class="stat" href="#/ingredientes" style="text-decoration:none"><div class="n">' + nIng + '</div><div class="r">ingredientes na biblioteca</div></a>' +
+      (function () { const d = calcProLabore().disponivel; return '<a class="stat" href="#/prolabore" style="text-decoration:none"><div class="n' + (d < 0 ? ' neg-txt' : '') + '">' + (d < 0 ? '−' : '') + C.brl(Math.abs(d)) + '</div><div class="r">de pró-labore disponível</div></a>'; })() +
       (function () {
         const pm = C.periodoPreset('mes', C.dataISO()), rm = C.resumoCaixa(C.filtrarMovimentos(movsTodos(), pm));
         return '<a class="stat" href="#/caixa" style="text-decoration:none"><div class="n ' + (rm.saldo < 0 ? 'neg-txt' : '') + '">' + (rm.saldo < 0 ? '−' : '') + C.brl(Math.abs(rm.saldo)) + '</div><div class="r">de saldo no caixa este mês</div></a>' +
@@ -1223,6 +1223,12 @@
     const cli = S.dados.clientes[p.clienteId];
     if (cli) p.clienteNome = cli.nome;
     p.itens.forEach((it, i) => { if (it.tipo === 'rec' && C.numOk(c.itens[i].custoUnit)) it.custoUnit = c.itens[i].custoUnit; });
+    // parte do pró-labore em cada item: acompanha a receita até a entrega; depois fica congelada
+    const ctxPl = ctxCalc();
+    p.itens.forEach(function (it) {
+      if (it.tipo !== 'rec') return;
+      if (p.status !== 'entregue' || !C.numOk(it.maoObraUnit)) it.maoObraUnit = C.maoObraItemPedido(Object.assign({}, it, { maoObraUnit: null }), ctxPl);
+    });
     // Resumo em colunas simples: aparece legível na planilha e servirá aos relatórios.
     p.total = c.total; p.pago = c.pago; p.restante = c.restante; p.lucroEstimado = c.lucro; p.situacaoPagamento = c.situacao;
     const orig = S.dados.pedidos[p.id];
@@ -1934,7 +1940,12 @@
       setTimeout(() => { const s = $('[data-c="itensCompra.' + (l.itensCompra.length - 1) + '.ingredienteId"]'); if (s) s.focus(); }, 50);
     },
     'rem-compra': function (el) { S.editor.d.itensCompra.splice(+el.dataset.i, 1); marcarSujo(); render(false); },
-    'salvar-lanc': function () { salvarLancamento(); },
+    'salvar-lanc': async function () {
+      const l = S.editor && S.editor.d; if (!l) return;
+      if (validarLancamento(l)) { salvarLancamento(); return; } // mostra o erro de validação
+      if (!(await conferirRetiradaNoLancamento(l))) return;
+      salvarLancamento();
+    },
     'excluir-lanc': async function () {
       const l = S.editor.d, orig = S.dados.lancamentos[l.id];
       const temCompra = orig && (orig.itensCompra || []).length;
@@ -2195,14 +2206,14 @@
             if (!cli) { toast('Escolha o cliente do fiado.'); return; }
             const [, rid, vid] = item.split(':');
             const ped = { id: uid(), clienteId: cli.id, clienteNome: cli.nome, status: 'entregue', tipoEntrega: 'retirada', dataEntrega: hoje(), horaEntrega: '', endereco: '', taxaEntrega: null,
-              itens: [{ id: uid(), tipo: 'rec', receitaId: rid, variacaoId: vid, nome: nomeVitrine(item), qtd: n, precoUnit: pu }], desconto: null, formaPagamento: 'pix', pagamentos: [],
+              itens: [{ id: uid(), tipo: 'rec', receitaId: rid, variacaoId: vid, nome: nomeVitrine(item), qtd: n, precoUnit: pu, maoObraUnit: C.maoObraItemPedido({ tipo: 'rec', receitaId: rid, variacaoId: vid }, ctxCalc()) }], desconto: null, formaPagamento: 'pix', pagamentos: [],
               obs: 'Venda da vitrine no fiado', historicoStatus: [{ status: 'entregue', em: agoraISO() }] };
             const cp = calcPed(ped); ped.total = cp.total; ped.pago = 0; ped.restante = cp.total; ped.situacaoPagamento = 'pendente';
             gravarRegistro('pedidos', ped);
             registrarMov(item, -n, 'venda', { ref: 'vendaped:' + ped.id, obs: 'Fiado: ' + cli.nome });
             d.close(); toast('Fiado registrado: ' + C.brl(cp.total) + ' em A receber.'); render(false); return;
           }
-          const l = { id: uid(), tipo: 'entrada', data: hoje(), valor: C.round2(n * pu), categoria: fonteCanonica('Venda de balcão', 'entrada'), descricao: C.num(n) + 'x ' + nomeVitrine(item) + ' (vitrine)', forma: f.forma.value, obs: '', itensCompra: [], vitrine: { item: item, qtd: n } };
+          const l = { id: uid(), tipo: 'entrada', data: hoje(), valor: C.round2(n * pu), categoria: fonteCanonica('Venda de balcão', 'entrada'), descricao: C.num(n) + 'x ' + nomeVitrine(item) + ' (vitrine)', forma: f.forma.value, obs: '', itensCompra: [], vitrine: { item: item, qtd: n, maoObraUnit: C.maoObraItemPedido({ tipo: 'rec', receitaId: item.split(':')[1], variacaoId: item.split(':')[2] }, ctx) } };
           gravarRegistro('lancamentos', l);
           registrarMov(item, -n, 'venda', { ref: 'venda:' + l.id });
           toast('Venda registrada: ' + C.brl(l.valor) + ' no Caixa.');
@@ -2265,7 +2276,7 @@
   };
 
   // ================= Financeiro =================
-  const ABAS_CX = [['#/caixa', 'Movimento'], ['#/contas', 'A pagar'], ['#/receber', 'A receber'], ['#/reserva', 'Reserva'], ['#/relatorios', 'Relatórios']];
+  const ABAS_CX = [['#/caixa', 'Movimento'], ['#/contas', 'A pagar'], ['#/receber', 'A receber'], ['#/prolabore', 'Pró-labore'], ['#/relatorios', 'Relatórios']];
   let memoMedia = { chave: '', v: null };
   function mediaContas() {
     const chave = (S.versao || 0) + '|' + hoje();
@@ -2474,16 +2485,95 @@
     });
   }
 
-  // ---------- Reserva e pró-labore ----------
-  function telaReserva() {
+  // ---------- Pró-labore e reserva ----------
+  function calcProLabore() { return C.proLaboreDisponivel(lista('pedidos'), lista('lancamentos'), ctxCalc(), nomeCliente); }
+  function dinheiroNoCaixa() {
+    const saldo = C.resumoCaixa(movsTodos()).saldo;
+    const res = C.resumoReserva(lista('lancamentos'), configEfetiva(), hoje().slice(0, 7), 0).saldo;
+    return C.round2(saldo - res);
+  }
+  function telaProLabore() {
     const mes = hoje().slice(0, 7), cf = cfg();
+    const lim = C.limitesMes(mes);
+    const pl = calcProLabore();
+    const neg = pl.disponivel < -0.004;
+    const caixa = dinheiroNoCaixa();
+    let h = cab('Pró-labore e reserva', 'Quanto do seu trabalho as vendas já pagaram, o que você retirou e o que guardar.') + abas(ABAS_CX, '#/prolabore');
+    h += '<section class="bloco"><h2>Pró-labore</h2>' +
+      '<div class="destaque-reserva destaque-pl"><div class="r">Disponível para retirar</div><div class="v ' + (neg ? 'neg-txt' : 'pos-txt') + '">' + (neg ? '−' : '') + C.brl(Math.abs(pl.disponivel)) + '</div>' +
+      (neg ? '<div class="r neg-txt">Você retirou ' + C.brl(-pl.disponivel) + ' a mais do que as vendas liberaram até agora.</div>' : '') + '</div>' +
+      '<dl class="resultados" style="margin-top:12px"><div><dt>Liberado pelas vendas</dt><dd>' + C.brl(pl.liberado) + '</dd></div>' +
+      (pl.estimado > 0 ? '<div><dt>Estimado (vendas sem produto)</dt><dd>' + C.brl(pl.estimado) + '</dd></div>' : '') +
+      '<div><dt>Já retirado</dt><dd>' + C.brl(pl.retirado) + '</dd></div><div><dt>A liberar</dt><dd>' + C.brl(pl.aLiberar) + '</dd></div></dl>' +
+      '<p class="mudo" style="margin-top:8px">"A liberar" é a sua parte em pedidos ainda não entregues ou não pagos. Entra no disponível quando o pedido for entregue e pago.</p>' +
+      (pl.disponivel > 0.004 && caixa < pl.disponivel ? '<div class="aviso" style="margin-top:12px">' + I.alerta + '<div class="txt">O caixa tem ' + C.brl(Math.max(0, caixa)) + ' agora, sem contar a reserva. Parte do pró-labore liberado pode estar em ingredientes, estoque ou contas já pagas.</div></div>' : '') +
+      '<div class="acoes" style="margin-top:14px"><button type="button" class="btn" data-acao="retirar">' + I.mais + 'Registrar retirada</button></div>' +
+      '<details class="ajuda"><summary>Como é calculado?</summary><div>' +
+      '<p>Cada preço já traz uma parte para o seu trabalho: a mão de obra da receita (valor da hora × tempo de produção, incluindo o das receitas usadas dentro de outras). Essa parte é liberada quando o pedido é entregue, na proporção do que foi pago. Nas vendas da vitrine, na hora da venda.</p>' +
+      (pl.porProduto.length ? '<ul class="historico" style="margin-top:8px">' + pl.porProduto.slice(0, 10).map(x => '<li><span>' + esc(x.nome) + ' <small class="mudo">' + C.brl(x.maoObraUnit) + (C.numOk(x.pct) ? ' (' + C.pct(x.pct, 0) + ' do preço)' : '') + ' × ' + C.num(x.qtd) + '</small></span><b>' + C.brl(x.liberado) + '</b></li>').join('') + '</ul>' : '<p class="mudo">Ainda não há vendas entregues com produto.</p>') +
+      (pl.receitaAvulsa > 0 ? '<p style="margin-top:8px">Vendas lançadas no Caixa sem produto (balcão, iFood): ' + C.brl(pl.receitaAvulsa) + ' × ' + C.pct(pl.pctMedio, 1) + ' = ' + C.brl(pl.estimado) + '. A porcentagem é a média ' + (pl.pctOrigem === 'vendas' ? 'das vendas com produto' : pl.pctOrigem === 'receitas' ? 'das receitas cadastradas' : '(sem dados ainda)') + '. "Outras entradas" não contam como venda.</p>' : '') +
+      '<p style="margin-top:8px">O valor da hora fica guardado em cada venda: mudar o valor em Ajustes vale para as próximas vendas, não muda o que já foi vendido.</p></div></details></section>';
+    const plDesejado = C.proLaboreDesejado(configEfetiva());
+    const retMes = pl.retiradas.filter(l => l.data >= lim.de && l.data <= lim.ate);
+    const totMes = retMes.reduce((s, l) => s + l.valor, 0);
+    h += '<section class="bloco"><div class="cab-bloco"><h2>Retiradas</h2><span class="mudo">em ' + esc(C.nomeMes(mes).split(' ')[0]) + ': <b>' + C.brl(totMes) + '</b></span></div>' +
+      (C.numOk(plDesejado) && plDesejado > 0 ? '<div class="meta-barra"><i style="width:' + Math.min(100, totMes / plDesejado * 100).toFixed(1) + '%"></i></div><small class="mudo">' + C.pct(totMes / plDesejado, 0) + ' do salário desejado de ' + C.brl(plDesejado) + ' (Ajustes → Mão de obra)</small>' : '') +
+      (pl.retiradas.length ? '<div class="lista" style="margin-top:12px">' + pl.retiradas.slice(0, 20).map(l => '<a class="item" href="#/lancamento/' + encodeURIComponent(l.id) + '"><div class="principal"><div class="nome">' + esc(dataCurta(l.data)) + '</div><div class="det">' + esc(l.descricao && l.descricao !== C.FONTE_PROLABORE ? l.descricao : 'Pró-labore') + (l.forma ? ', ' + esc(formaTxt(l.forma)) : '') + '</div></div><div class="valor">' + C.brl(l.valor) + '</div></a>').join('') + '</div>' + (pl.retiradas.length > 20 ? '<p class="mudo" style="margin-top:8px">Mostrando as 20 mais recentes. Todas estão no Movimento, categoria Pró-labore.</p>' : '')
+        : '<p class="mudo" style="margin-top:8px">Nenhuma retirada registrada ainda.</p>') + '</section>';
+    h += telaReservaBloco(mes, cf);
+    return h;
+  }
+  function folhaRetirada() {
+    const pl = calcProLabore(), disp = pl.disponivel;
+    const corpo = '<div class="destaque-reserva"><div class="r">Disponível agora</div><div class="v ' + (disp < 0 ? 'neg-txt' : 'pos-txt') + '">' + (disp < 0 ? '−' : '') + C.brl(Math.abs(disp)) + '</div></div>' +
+      '<form id="f-ret" style="display:flex;flex-direction:column;gap:12px"><div class="linha-campos"><label class="campo"><span>Valor da retirada</span><span class="com-prefixo"><i>R$</i><input class="entrada num" name="valor" inputmode="decimal" required></span></label>' +
+      '<label class="campo"><span>Data</span><input class="entrada" type="date" name="data" value="' + hoje() + '"></label></div>' +
+      '<label class="campo"><span>Forma</span><select class="entrada" name="forma">' + Object.keys(C.FORMAS_LANCAMENTO).map(k => '<option value="' + k + '"' + (k === 'pix' ? ' selected' : '') + '>' + C.FORMAS_LANCAMENTO[k] + '</option>').join('') + '</select></label>' +
+      '<label class="campo"><span>Observação</span><input class="entrada" name="obs" placeholder="Opcional"></label>' +
+      '<div class="aviso neg" id="aviso-ret" hidden></div>' +
+      '<div class="rodape-folha"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn" type="submit">Registrar retirada</button></div></form>';
+    abrirFolha('Retirada de pró-labore', corpo, function (d) {
+      const f = $('#f-ret', d), av = $('#aviso-ret', d);
+      f.valor.focus();
+      function conferir() {
+        const v = C.lerNum(f.valor.value);
+        const passa = v > 0 && v > disp + 0.004;
+        av.hidden = !passa;
+        if (passa) av.innerHTML = I.alerta + '<div class="txt">Passa ' + C.brl(v - Math.max(0, disp)) + ' do disponível. Esse valor sairia do dinheiro da doceria (ingredientes, contas, reserva), não do que as vendas já pagaram pelo seu trabalho.</div>';
+      }
+      f.addEventListener('input', conferir);
+      f.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const v = C.lerNum(f.valor.value);
+        if (!(v > 0)) { toast('Informe o valor.'); return; }
+        if (v > disp + 0.004) {
+          const ok = await confirmar('Retirar mais do que o disponível?', 'O disponível é ' + (disp < 0 ? '−' : '') + C.brl(Math.abs(disp)) + '. Retirando ' + C.brl(v) + ', você fica ' + C.brl(v - disp) + ' acima do que as vendas liberaram até agora.', 'Retirar mesmo assim', true);
+          if (!ok) return;
+        }
+        gravarRegistro('lancamentos', { id: uid(), tipo: 'saida', data: f.data.value || hoje(), valor: C.round2(v), categoria: C.FONTE_PROLABORE, descricao: f.obs.value.trim() || C.FONTE_PROLABORE, forma: f.forma.value, obs: '', itensCompra: [] });
+        d.close();
+        const novo = calcProLabore().disponivel;
+        toast('Retirada registrada. Disponível agora: ' + (novo < 0 ? '−' : '') + C.brl(Math.abs(novo)) + '.');
+        render(false);
+      });
+    });
+  }
+  // Retirada lançada pelo Movimento: mesmo aviso
+  async function conferirRetiradaNoLancamento(l) {
+    if (l.tipo !== 'saida' || C.semAcento(fonteCanonica(l.categoria, 'saida')) !== C.semAcento(C.FONTE_PROLABORE)) return true;
+    const orig = S.dados.lancamentos[l.id];
+    const jaContava = orig && !orig.excluidoEm && C.semAcento(orig.categoria) === C.semAcento(C.FONTE_PROLABORE) ? orig.valor : 0;
+    const disp = calcProLabore().disponivel + jaContava, v = totalLancamento(l);
+    if (v <= jaContava + 0.004) return true; // editar sem aumentar o valor não pede confirmação
+    if (!(v > disp + 0.004)) return true;
+    return confirmar('Retirar mais do que o disponível?', 'O pró-labore disponível é ' + (disp < 0 ? '−' : '') + C.brl(Math.abs(disp)) + '. Com esta retirada de ' + C.brl(v) + ', você fica ' + C.brl(v - disp) + ' acima do que as vendas liberaram.', 'Salvar mesmo assim', true);
+  }
+  function telaReservaBloco(mes, cf) {
     const lim = C.limitesMes(mes);
     const rm = C.resumoCaixa(C.filtrarMovimentos(movsTodos(), lim));
     const rv = C.resumoReserva(lista('lancamentos'), configEfetiva(), mes, rm.entradas);
-    const plDesejado = C.proLaboreDesejado(configEfetiva());
-    const retiradasMes = movsTodos().filter(m => m.tipo === 'saida' && C.semAcento(m.fonte) === C.semAcento(C.FONTE_PROLABORE) && m.data >= lim.de && m.data <= lim.ate);
-    let h = cab('Reserva e pró-labore', 'O que guardar de cada venda e o que você retira para si.') + abas(ABAS_CX, '#/reserva');
-    h += '<section class="bloco"><h2>Reserva</h2><p class="explica">O app não mexe no seu dinheiro: ele calcula quanto separar. Quando transferir para a poupança ou guardar o valor, registre aqui.</p>' +
+    let h = '';
+    h += '<section class="bloco" id="reserva"><h2>Reserva</h2><p class="explica">O app não mexe no seu dinheiro: ele calcula quanto separar. Quando transferir para a poupança ou guardar o valor, registre aqui.</p>' +
       '<div class="destaque-reserva"><div class="r">Guardado até hoje</div><div class="v">' + C.brl(rv.saldo) + '</div>' +
       (rv.meta ? '<div class="meta-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(Math.min(100, rv.saldo / rv.meta * 100)) + '"><i style="width:' + Math.min(100, Math.max(0, rv.saldo / rv.meta * 100)).toFixed(1) + '%"></i></div><div class="r">' + C.pct(Math.max(0, rv.saldo) / rv.meta, 0) + ' da meta de ' + C.brl(rv.meta) + '</div>' : '') + '</div>' +
       '<h3 style="margin-top:18px">Em ' + esc(C.nomeMes(mes).split(' ')[0]) + '</h3><dl class="resultados" style="margin-top:8px"><div><dt>Entradas do mês</dt><dd>' + C.brl(rm.entradas) + '</dd></div><div><dt>Separar (' + C.num(rv.pct) + '%)</dt><dd>' + C.brl(rv.sugeridoMes) + '</dd></div><div><dt>Já guardado</dt><dd>' + C.brl(rv.guardadoMes) + '</dd></div><div class="' + (rv.faltaGuardar > 0 ? 'neg' : 'pos') + '"><dt>Falta guardar</dt><dd>' + C.brl(rv.faltaGuardar) + '</dd></div></dl>' +
@@ -2491,12 +2581,6 @@
       '<div class="grade" style="margin-top:16px"><label class="campo"><span>Separar de cada entrada</span><span class="com-prefixo"><input class="entrada num" data-cfg="reservaPct" data-n inputmode="decimal" value="' + inNum(cf.reservaPct) + '"><i class="dir">%</i></span></label>' +
       '<label class="campo"><span>Meta da reserva (opcional)</span><span class="com-prefixo"><i>R$</i><input class="entrada num" data-cfg="reservaMeta" data-n inputmode="decimal" value="' + inNum(cf.reservaMeta) + '" placeholder="sem meta"></span></label></div>' +
       (rv.historico.length ? '<h3 style="margin-top:18px">Histórico</h3><ul class="historico">' + rv.historico.slice(0, 12).map(l => '<li><span>' + dataDia(l.data) + ', ' + (l.valor > 0 ? 'guardado' : 'usado') + (l.descricao && l.descricao !== 'Reserva' ? ' <small class="mudo">' + esc(l.descricao) + '</small>' : '') + '</span><span><b class="' + (l.valor > 0 ? 'pos-txt' : 'neg-txt') + '">' + (l.valor > 0 ? '+' : '−') + C.brl(Math.abs(l.valor)) + '</b><button type="button" class="link-btn mini" data-acao="reserva-rem" data-id="' + esc(l.id) + '" aria-label="Remover registro">remover</button></span></li>').join('') + '</ul>' : '') + '</section>';
-    const ret = retiradasMes.reduce((s, m) => s + m.valor, 0);
-    h += '<section class="bloco"><h2>Pró-labore</h2><p class="explica">O que você retira para si. Aparece separado das despesas da doceria, para o lucro do mês mostrar quanto o negócio rendeu antes de você se pagar.</p>' +
-      '<div class="destaque-reserva"><div class="r">Retirado em ' + esc(C.nomeMes(mes).split(' ')[0]) + '</div><div class="v">' + C.brl(ret) + '</div>' +
-      (C.numOk(plDesejado) && plDesejado > 0 ? '<div class="meta-barra"><i style="width:' + Math.min(100, ret / plDesejado * 100).toFixed(1) + '%"></i></div><div class="r">' + C.pct(ret / plDesejado, 0) + ' dos ' + C.brl(plDesejado) + ' que você definiu em Ajustes → Mão de obra</div>' : '<div class="r">Defina o salário desejado em Ajustes → Mão de obra para acompanhar.</div>') + '</div>' +
-      (retiradasMes.length ? '<ul class="historico" style="margin-top:12px">' + retiradasMes.map(m => '<li><span>' + dataDia(m.data) + (m.descricao && m.descricao !== C.FONTE_PROLABORE ? ', ' + esc(m.descricao) : '') + '</span><b>' + C.brl(m.valor) + '</b></li>').join('') + '</ul>' : '') +
-      '<div class="acoes" style="margin-top:14px"><a class="btn" href="#/lancamento/novo?tipo=saida&categoria=' + encodeURIComponent(C.FONTE_PROLABORE) + '">' + I.mais + 'Registrar retirada</a></div></section>';
     return h;
   }
   function folhaReserva(tipo) {
@@ -2622,6 +2706,7 @@
     'editar-recorrente': function (el) { folhaRecorrente(el.dataset.id); },
     cobrar: function (el) { const g = (S.gruposReceber || [])[+el.dataset.i]; if (g) folhaCobranca(g); },
     'reserva-mov': function (el) { folhaReserva(el.dataset.v); },
+    retirar: folhaRetirada,
     'reserva-rem': async function (el) {
       const l = S.dados.lancamentos[el.dataset.id]; if (!l) return;
       if (!await confirmar('Remover registro?', 'Remover ' + (l.valor > 0 ? 'o depósito' : 'o uso') + ' de ' + C.brl(Math.abs(l.valor)) + ' de ' + dataDia(l.data) + '.', 'Remover', true)) return;

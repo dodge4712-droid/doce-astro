@@ -144,6 +144,7 @@
     const itens = [];
     let custoIng = 0;
     let temCiclo = false;
+    let maoObraSub = 0;
 
     if (pilha.indexOf(rec.id) >= 0) {
       return { erroCiclo: true, avisos: ['Receita usa a si mesma em cadeia.'] };
@@ -168,7 +169,7 @@
             else {
               const porBase = it.modo === 'preco' ? r.precoInternoPorBase : r.custoPorBase;
               if (!numOk(porBase)) aviso = 'Receita base sem preço de venda calculável';
-              else custo = porBase * qtdBase;
+              else { custo = porBase * qtdBase; if (numOk(r.maoObraPorBase)) maoObraSub += r.maoObraPorBase * qtdBase; }
             }
           }
         }
@@ -209,6 +210,7 @@
     if (!(horas > 0)) avisos.push('Sem tempo de produção: custos fixos e mão de obra ficam de fora.');
 
     const custoLote = custoIng + perdaValor + diretos + fixos + maoObra;
+    const maoObraEmbutida = maoObra + (perda > 0 && perda < 1 ? maoObraSub / (1 - perda) : maoObraSub);
 
     const rend = rec.rendimento || {};
     const rendBase = paraBase(rend.qtd, rend.unidade);
@@ -217,18 +219,20 @@
     if (numOk(rendBase) && rendBase > 0) custoPorBase = custoLote / rendBase;
     else avisos.push('Informe o rendimento para calcular o custo por unidade.');
 
+    const maoObraPorBase = numOk(rendBase) && rendBase > 0 ? maoObraEmbutida / rendBase : null;
     const custoVariavelPorBase = numOk(rendBase) && rendBase > 0 ? (custoIng + perdaValor + diretos) / rendBase : null;
     const margem = margemDaReceita(rec, cfg);
     const precoInternoPorBase = numOk(custoPorBase) && numOk(margem) && margem < 1 ? custoPorBase / (1 - margem) : null;
 
     const vars = (rec.variacoes && rec.variacoes.length ? rec.variacoes : []).map(function (v) {
-      return calcularVariacao(v, { custoVariavelPorBase: custoVariavelPorBase, custoPorBase: custoPorBase, unBase: unBase, rendUn: rend.unidade, alvo: alvoDaReceita(rec, cfg), taxas: rec.taxas || {}, cfg: cfg });
+      return calcularVariacao(v, { maoObraPorBase: maoObraPorBase, custoVariavelPorBase: custoVariavelPorBase, custoPorBase: custoPorBase, unBase: unBase, rendUn: rend.unidade, alvo: alvoDaReceita(rec, cfg), taxas: rec.taxas || {}, cfg: cfg });
     });
 
     return {
       itens: itens, custoIngredientes: custoIng, perdaValor: perdaValor, diretos: diretos,
       fixos: fixos, maoObra: maoObra, custoLote: custoLote, horas: horas,
       rendimentoBase: rendBase, unidadeBase: unBase, custoPorBase: custoPorBase, custoVariavelPorBase: custoVariavelPorBase,
+      maoObraEmbutida: maoObraEmbutida, maoObraPorBase: maoObraPorBase,
       margem: margem, markup: margemParaMarkup(margem), temCiclo: temCiclo,
       precoInternoPorBase: precoInternoPorBase, variacoes: vars, avisos: avisos
     };
@@ -256,6 +260,7 @@
     const emb = numOk(v.embalagem) ? v.embalagem : 0;
     r.custo = o.custoPorBase * qBase + emb;
     r.custoVariavel = numOk(o.custoVariavelPorBase) ? o.custoVariavelPorBase * qBase + emb : null;
+    r.maoObra = numOk(o.maoObraPorBase) ? o.maoObraPorBase * qBase : null;
     const t = o.taxas || {};
     const tPct = (taxaCartaoPct(o.cfg, t.cartao) + (t.app ? (o.cfg.taxas.app || 0) : 0)) / 100;
     const tFix = t.entrega ? (o.cfg.taxas.entrega || 0) : 0;
@@ -298,8 +303,7 @@
   }
 
   function variacaoPreco(ing, dias) {
-    const h = (ing.historico || []).filter(x => numOk(x.porBase))
-      .slice().sort((a, b) => String(a.data).localeCompare(String(b.data)));
+    const h = ordenarHistorico((ing.historico || []).filter(x => numOk(x.porBase)).slice());
     const atual = custoIngrediente(ing);
     if (!atual || h.length < 2) return null;
     const limite = Date.now() - (dias || 90) * 864e5;
@@ -351,6 +355,14 @@
     const v = (r.variacoes || []).find(x => x.id === it.variacaoId);
     return v && numOk(v.custo) ? v.custo : (numOk(it.custoUnit) ? it.custoUnit : null);
   }
+  function maoObraItemPedido(it, ctx) {
+    if (it.tipo !== 'rec') return 0;
+    if (numOk(it.maoObraUnit)) return it.maoObraUnit;
+    const rec = ctx.receitas[it.receitaId];
+    if (!rec || rec.excluidoEm) return 0;
+    const v = (calcularReceita(rec, ctx).variacoes || []).find(x => x.id === it.variacaoId);
+    return v && numOk(v.maoObra) ? v.maoObra : 0;
+  }
   function calcularPedido(p, ctx) {
     const cfg = mesclarConfig(ctx.config);
     let subtotal = 0, custo = 0, custoCompleto = true;
@@ -359,7 +371,7 @@
       const cu = custoItemPedido(it, ctx);
       subtotal += q * pu;
       if (numOk(cu)) custo += cu * q; else if (q > 0) custoCompleto = false;
-      return { id: it.id, total: q * pu, custoUnit: cu, custo: numOk(cu) ? cu * q : null };
+      return { id: it.id, total: q * pu, custoUnit: cu, custo: numOk(cu) ? cu * q : null, maoObraUnit: maoObraItemPedido(it, ctx) };
     });
     const taxaEntrega = p.tipoEntrega === 'entrega' && numOk(p.taxaEntrega) ? p.taxaEntrega : 0;
     const desconto = numOk(p.desconto) ? p.desconto : 0;
@@ -608,6 +620,14 @@
   // Compra de ingrediente: grava o ponto no histórico (na data da compra) e
   // o preço atual passa a ser o do ponto mais recente. Reeditar a mesma compra
   // substitui o ponto dela em vez de acrescentar outro.
+  // Momento de cada ponto do histórico (aceita "AAAA-MM-DD", horário local ou ISO com fuso)
+  function momento(x) { const t = new Date(String(x && x.data || '')).getTime(); return isFinite(t) ? t : 0; }
+  function ordenarHistorico(h) { return h.sort((a, b) => momento(a) - momento(b)); }
+  // Compra com data de hoje vale a partir de agora; de outro dia, a partir do fim daquele dia.
+  function momentoDaCompra(data) {
+    const agora = new Date();
+    return data === dataISO(agora) ? agora.toISOString() : new Date(data + 'T23:59:59').toISOString();
+  }
   function recalcularPrecoAtual(ing) {
     const h = ing.historico || [];
     const ult = h[h.length - 1];
@@ -622,10 +642,10 @@
     if (!(it.embalagens > 0) || !(tamBase > 0) || !(numOk(it.valor) && it.valor >= 0) || !mesmaFamilia(un, ing.unidade)) return null;
     const novo = JSON.parse(JSON.stringify(ing));
     const precoEmb = Math.round(it.valor / it.embalagens * 10000) / 10000;
-    const ponto = { data: data + 'T12:00:00', valorPago: precoEmb, qtdEmbalagem: it.qtdEmbalagem, unidade: un, porBase: precoEmb / tamBase, compra: chave };
+    const ponto = { data: momentoDaCompra(data), valorPago: precoEmb, qtdEmbalagem: it.qtdEmbalagem, unidade: un, porBase: precoEmb / tamBase, compra: chave };
     const h = (novo.historico || []).filter(x => x.compra !== chave);
     h.push(ponto);
-    h.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+    ordenarHistorico(h);
     novo.historico = h;
     const antes = custoIngrediente(ing);
     recalcularPrecoAtual(novo);
@@ -635,7 +655,7 @@
   function removerCompra(ing, chave) {
     if (!(ing.historico || []).some(x => x.compra === chave)) return null;
     const novo = JSON.parse(JSON.stringify(ing));
-    novo.historico = novo.historico.filter(x => x.compra !== chave);
+    novo.historico = ordenarHistorico(novo.historico.filter(x => x.compra !== chave));
     return recalcularPrecoAtual(novo);
   }
 
@@ -894,6 +914,71 @@
     return '\ufeff' + L.join('\r\n');
   }
 
+
+  // ---------- Pró-labore disponível ----------
+  // Cada preço já traz a parte do seu trabalho (a mão de obra da receita).
+  // Disponível = parte liberada pelas vendas − retiradas registradas.
+  const ORIGENS_NAO_VENDA = ['outras entradas'];
+  function proLaboreDisponivel(pedidos, lancamentos, ctx, nomeDoPedido) {
+    const prod = {};
+    let liberado = 0, aLiberar = 0, receitaIdent = 0, moIdent = 0;
+    function porProduto(chave, nome, qtd, preco, moUnit, lib) {
+      const x = prod[chave] || (prod[chave] = { nome: nome, qtd: 0, receita: 0, maoObraUnit: moUnit, liberado: 0 });
+      x.qtd += qtd; x.receita += preco * qtd; x.liberado += lib; x.maoObraUnit = moUnit;
+    }
+    (pedidos || []).forEach(function (p) {
+      if (p.excluidoEm || ['cancelado', 'orcamento'].indexOf(p.status) >= 0) return;
+      const c = calcularPedido(p, ctx);
+      const mo = (p.itens || []).reduce((s, it, i) => s + (numOk(it.qtd) ? it.qtd : 0) * (c.itens[i].maoObraUnit || 0), 0);
+      if (p.status !== 'entregue') { aLiberar += mo; return; }
+      const frac = c.total > 0 ? Math.min(1, Math.max(0, c.pago / c.total)) : 0;
+      liberado += mo * frac; aLiberar += mo * (1 - frac);
+      (p.itens || []).forEach(function (it, i) {
+        if (!numOk(it.qtd) || it.qtd <= 0) return;
+        const pu = numOk(it.precoUnit) ? it.precoUnit : 0, mu = c.itens[i].maoObraUnit || 0;
+        receitaIdent += it.qtd * pu * frac; moIdent += it.qtd * mu * frac;
+        if (it.tipo === 'rec') porProduto('rec:' + it.receitaId + ':' + it.variacaoId, it.nome || 'Produto', it.qtd, pu, mu, it.qtd * mu * frac);
+      });
+    });
+    let receitaAvulsa = 0;
+    const retiradas = [];
+    (lancamentos || []).forEach(function (l) {
+      if (l.excluidoEm || !numOk(l.valor)) return;
+      if (l.tipo === 'saida' && semAcento(l.categoria) === semAcento(FONTE_PROLABORE)) { retiradas.push(l); return; }
+      if (l.tipo !== 'entrada') return;
+      if (l.vitrine) {
+        const [, rid, vid] = String(l.vitrine.item).split(':');
+        const mu = numOk(l.vitrine.maoObraUnit) ? l.vitrine.maoObraUnit : maoObraItemPedido({ tipo: 'rec', receitaId: rid, variacaoId: vid }, ctx);
+        const lib = mu * l.vitrine.qtd;
+        liberado += lib; receitaIdent += l.valor; moIdent += lib;
+        const r = ctx.receitas[rid], v = r && (r.variacoes || []).find(x => x.id === vid);
+        porProduto('rec:' + rid + ':' + vid, r ? (r.nome || 'Receita') + ' (' + (v ? v.nome : 'opção') + ')' : 'Produto', l.vitrine.qtd, l.valor / l.vitrine.qtd, mu, lib);
+        return;
+      }
+      if (ORIGENS_NAO_VENDA.indexOf(semAcento(l.categoria)) >= 0 || l.contaId) return;
+      receitaAvulsa += l.valor;
+    });
+    // Porcentagem média: das vendas com produto; sem elas, a média das receitas cadastradas
+    let pctMedio = receitaIdent > 0 ? moIdent / receitaIdent : null, pctOrigem = 'vendas';
+    if (pctMedio === null) {
+      let mo = 0, pr = 0;
+      Object.values(ctx.receitas || {}).forEach(function (r) {
+        if (r.excluidoEm) return;
+        (calcularReceita(r, ctx).variacoes || []).forEach(v => { if (numOk(v.maoObra) && numOk(v.preco) && v.preco > 0) { mo += v.maoObra; pr += v.preco; } });
+      });
+      pctMedio = pr > 0 ? mo / pr : 0; pctOrigem = pr > 0 ? 'receitas' : 'nenhuma';
+    }
+    const estimado = receitaAvulsa * pctMedio;
+    const retirado = retiradas.reduce((s, l) => s + l.valor, 0);
+    const lista = Object.values(prod).map(x => Object.assign(x, { receita: round2(x.receita), liberado: round2(x.liberado), pct: x.receita > 0 && x.qtd > 0 ? x.maoObraUnit / (x.receita / x.qtd) : null }))
+      .sort((a, b) => b.liberado - a.liberado);
+    return {
+      liberado: round2(liberado), estimado: round2(estimado), receitaAvulsa: round2(receitaAvulsa), pctMedio: pctMedio, pctOrigem: pctOrigem,
+      aLiberar: round2(aLiberar), retirado: round2(retirado), disponivel: round2(liberado + estimado - retirado),
+      porProduto: lista, retiradas: retiradas.sort((a, b) => String(b.data).localeCompare(String(a.data)))
+    };
+  }
+
   const API = {
     UNIDADES, normUn, unidadesDaFamilia, paraBase, mesmaFamilia,
     numOk, lerNum, brl, num, pct,
@@ -904,7 +989,7 @@
     calcularPedido, necessidades, qtdLegivel, telefoneWhats, dataFalada, horaFalada, textoWhats,
     FORMAS_LANCAMENTO, FONTE_PEDIDOS, ORIGENS_PADRAO, CATEGORIAS_PADRAO, movimentos, filtrarMovimentos, resumoCaixa,
     periodoPreset, agruparPeriodo, csvMovimentos, aplicarCompra, removerCompra, semAcento,
-    FONTE_PROLABORE, FONTE_CONTAS_FIXAS, mesDe, somarMeses, limitesMes, nomeMes, mediaContasFixas, statusConta, vencimentoNoMes,
+    FONTE_PROLABORE, FONTE_CONTAS_FIXAS, maoObraItemPedido, proLaboreDisponivel, mesDe, somarMeses, limitesMes, nomeMes, mediaContasFixas, statusConta, vencimentoNoMes,
     contasRecorrentesAGerar, aReceber, textoCobranca, resumoReserva, proLaboreDesejado, produtosVendidos, pontoEquilibrio,
     resumoMes, variacaoPct, projecaoMes, csvRelatorio,
     MOTIVOS_ESTOQUE, STATUS_COM_BAIXA, chaveIng, chaveVitrine, saldosEstoque, baixaDoPedido, assinaturaItensPedido,
