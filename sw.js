@@ -1,9 +1,9 @@
 /* Espaço Nave — service worker: abre o app sem internet */
-const VERSAO = 'espaco-nave-v5.1.0';
+const VERSAO = 'espaco-nave-v5.3.0';
 const CASCA = ['./', './index.html', './app.js', './calc.js', './manifest.webmanifest', './icons/logo-selo.png', './icons/logo-estrela.png', './icons/favicon-64.png', './icons/apple-touch-icon.png', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSAO).then(c => c.addAll(CASCA)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSAO).then(c => c.addAll(CASCA.map(u => new Request(u, { cache: 'reload' })))  /* não aproveita cópia antiga guardada pelo navegador */).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSAO).map(k => caches.delete(k)))).then(() => self.clients.claim()));

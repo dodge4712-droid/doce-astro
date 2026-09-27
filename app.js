@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const C = window.Calc;
-  const VERSAO = '5.1.0';
+  const VERSAO = '5.3.0';
   const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos', 'lancamentos', 'estoque', 'contasPagar', 'recorrencias'];
   function dadosVazios() { const d = {}; TABELAS_LOCAIS.forEach(t => { d[t] = {}; }); return d; }
 
@@ -103,9 +103,26 @@
   // fechar no meio, o diário é reaplicado ao abrir.
   function lsLer(k) { try { const v = localStorage.getItem('en:' + k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function lsGravar(k, v) { try { localStorage.setItem('en:' + k, JSON.stringify(v)); } catch (e) { /* cheio */ } }
-  function anotarDiario(entrada) { const d = lsLer('diario') || []; d.push(entrada); lsGravar('diario', d); }
+  // As anotações do diário e do meta vão para o localStorage uma vez só, ao fim da
+  // operação em andamento (microtarefa): numa alteração isolada, isso acontece antes de
+  // qualquer outro evento; numa operação em lote (importar, restaurar backup), evita
+  // regravar o diário inteiro a cada registro.
+  let diarioPendente = [], metaSuja = false, descargaAgendada = false;
+  const LIMITE_DIARIO = 400; // acima disso, grava direto no banco do aparelho (mais rápido que o diário)
+  function descarregar() {
+    descargaAgendada = false;
+    if (diarioPendente.length) {
+      if (diarioPendente.length <= LIMITE_DIARIO) { const d = lsLer('diario') || []; lsGravar('diario', d.concat(diarioPendente)); }
+      else { clearTimeout(timerSalvar); timerSalvar = setTimeout(gravarJa, 0); }
+      diarioPendente = [];
+    }
+    if (metaSuja) { metaSuja = false; lsGravar('meta', S.meta); }
+  }
+  function agendarDescarga() { if (!descargaAgendada) { descargaAgendada = true; queueMicrotask(descarregar); } }
+  function anotarDiario(entrada) { diarioPendente.push(entrada); agendarDescarga(); }
   function gravarJa() {
     clearTimeout(timerSalvar); timerSalvar = null;
+    if (diarioPendente.length) diarioPendente = []; // o banco do aparelho vai receber tudo agora
     const n = (lsLer('diario') || []).length;
     return Promise.all([Local.gravar('dados', S.dados), Local.gravar('fila', S.fila), Local.gravar('meta', S.meta)]).then(function () {
       const d = lsLer('diario') || []; lsGravar('diario', d.slice(n));
@@ -113,7 +130,7 @@
   }
   function salvarLocal() {
     S.meta.salvoEm = Date.now();
-    lsGravar('meta', S.meta);
+    metaSuja = true; agendarDescarga();
     clearTimeout(timerSalvar);
     timerSalvar = setTimeout(gravarJa, 150);
   }
@@ -140,6 +157,11 @@
     return { ingredientes: S.dados.ingredientes, receitas: receitas, config: configEfetiva() };
   }
 
+  let filaIdx = null, filaArr = null;
+  function naFila(tabela, id) {
+    if (filaArr !== S.fila) { filaIdx = new Map(); S.fila.forEach(m => filaIdx.set(m.tabela + '\u0001' + m.rec.id, m)); filaArr = S.fila; }
+    return filaIdx.get(tabela + '\u0001' + id);
+  }
   function gravarRegistro(tabela, rec) {
     if (tabela === 'config') delete rec.mediaContasFixas; // valor calculado, não é guardado
     S.versao = (S.versao || 0) + 1;
@@ -148,10 +170,10 @@
     rec.atualizadoEm = agora;
     if (!rec.criadoEm) rec.criadoEm = ant && ant.criadoEm || agora;
     S.dados[tabela][rec.id] = rec;
-    const pend = S.fila.find(m => m.tabela === tabela && m.rec.id === rec.id);
+    const pend = naFila(tabela, rec.id);
     const base = pend ? pend.base : (ant ? ant.atualizadoEm : null);
     if (pend) pend.rec = clone(rec);
-    else S.fila.push({ tabela: tabela, base: base, rec: clone(rec) });
+    else { const m = { tabela: tabela, base: base, rec: clone(rec) }; S.fila.push(m); filaIdx.set(tabela + '\u0001' + rec.id, m); }
     anotarDiario({ tabela: tabela, rec: clone(rec), base: base, naFila: true });
     salvarLocal();
     agendarSync(1500);
@@ -273,6 +295,7 @@
   // ================= Toast =================
   function toast(msg, rotuloAcao, fn, ms) {
     const box = $('#toasts');
+    while (box.children.length >= 3) box.firstElementChild.remove(); // no máximo 3 avisos na tela
     const el = document.createElement('div'); el.className = 'toast';
     el.innerHTML = '<span class="txt">' + esc(msg) + '</span>' + (rotuloAcao ? '<button type="button">' + esc(rotuloAcao) + '</button>' : '');
     if (rotuloAcao) el.querySelector('button').onclick = function () { el.remove(); fn && fn(); };
@@ -327,7 +350,7 @@
   function secaoAtiva(h) {
     const r = h.split('?')[0].replace(/^(#\/[^#]*)#.*$/, '$1');
     if (r.startsWith('#/receita') || r === '#/ingredientes') return '#/receitas';
-    if (r.startsWith('#/pedido') || ['#/agenda', '#/producao', '#/compras', '#/estoque', '#/contagem'].includes(r)) return '#/pedidos';
+    if (r.startsWith('#/pedido') || ['#/agenda', '#/producao', '#/compras', '#/importar-compras', '#/estoque', '#/contagem'].includes(r)) return '#/pedidos';
     if (r.startsWith('#/cliente')) return '#/clientes';
     if (r === '#/caixa' || r.startsWith('#/lancamento') || ['#/contas', '#/receber', '#/reserva', '#/prolabore', '#/relatorios'].includes(r)) return '#/caixa';
     return NAV.some(n => n.h === r) ? r : '#/inicio';
@@ -339,7 +362,7 @@
     return '<div class="app">' +
       '<aside class="lateral"><a class="marca-lat" href="#/inicio"><span class="logo-selo" role="img" aria-label="Doce Astro, doces artesanais"></span></a>' +
       '<nav aria-label="Seções">' + links + '</nav>' +
-      '<div class="rodape-lat">Espaço Nave ' + VERSAO + '<br>Contas a pagar e relatórios chegam nas próximas etapas.</div></aside>' +
+      '<div class="rodape-lat">Espaço Nave ' + VERSAO + '</div></aside>' +
       '<div class="principal-col"><header class="topo"><a class="marca" href="#/inicio"><span class="emblema"><span class="logo-estrela"></span></span><b>Doce Astro</b></a><span class="espaco"></span>' +
       '<button type="button" class="pilula-sync" id="pilula-sync" data-acao="pilula"></button>' +
       '<a class="btn-icone" href="#/ajustes" aria-label="Ajustes">' + I.ajustes + '</a></header>' +
@@ -371,6 +394,7 @@
       case 'pedido': html = telaEditorPedido(decodeURIComponent(partes[1] || 'novo'), q); break;
       case 'agenda': html = telaAgenda(); break;
       case 'producao': html = telaProducao(); break;
+      case 'importar-compras': html = telaImportarCompras(); break;
       case 'compras':
         if (q.get('de') && q.get('ate')) S.compras = Object.assign(S.compras || { orc: false }, { de: q.get('de'), ate: q.get('ate') });
         html = telaCompras(); break;
@@ -1077,7 +1101,7 @@
     }
     const futuros = ['ativos', 'orcamento', 'receber'].includes(f[0]);
     const lst = todos.filter(f[2]).sort(futuros ? ordemData : (a, b) => ordemData(b, a));
-    h += '<div class="seg rolavel" role="group" aria-label="Filtrar pedidos" style="margin-bottom:12px">' + FILTROS_PED.map(x => '<a href="#/pedidos?f=' + x[0] + '" aria-pressed="' + (x === f) + '">' + x[1] + '</a>').join('') + '</div>';
+    h += '<div class="seg rolavel" role="group" aria-label="Filtrar pedidos" style="margin-bottom:12px">' + FILTROS_PED.map(x => '<a href="#/pedidos?f=' + x[0] + '"' + (x === f ? ' aria-current="true"' : '') + '>' + x[1] + '</a>').join('') + '</div>';
     h += '<div class="linha-campos" style="margin-bottom:14px"><label class="busca"><span class="sr">Buscar por cliente</span>' + I.busca + '<input class="entrada" id="busca-ped" type="search" placeholder="Buscar por cliente"></label></div>';
     if (!lst.length) return h + '<p class="mudo" style="padding:16px 4px">Nenhum pedido neste filtro.</p>';
     if (f[0] === 'receber') {
@@ -1431,7 +1455,7 @@
     lista('pedidos').filter(p => p.status !== 'cancelado' && p.dataEntrega && p.dataEntrega.slice(0, 7) === A.mes).forEach(p => { (porDia[p.dataEntrega] = porDia[p.dataEntrega] || []).push(p); });
     let h = cab('Agenda', 'Entregas e retiradas por dia.', '<a class="btn" href="#/pedido/novo?data=' + A.dia + '">' + I.mais + 'Novo pedido neste dia</a>') + abas(ABAS_PED, '#/agenda');
     h += '<section class="bloco"><div class="cal-cab"><button type="button" class="btn-icone" data-acao="agenda-mes" data-v="-1" aria-label="Mês anterior">' + I.voltar + '</button><h2>' + MESES[m - 1].charAt(0).toUpperCase() + MESES[m - 1].slice(1) + ' de ' + y + '</h2><button type="button" class="btn-icone" data-acao="agenda-mes" data-v="1" aria-label="Próximo mês">' + I.seta + '</button></div>' +
-      '<div class="cal" role="grid"><div class="cal-sem" aria-hidden="true">' + ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(x => '<span>' + x + '</span>').join('') + '</div><div class="cal-dias">' +
+      '<div class="cal" role="group" aria-label="Dias de ' + MESES[m - 1] + '"><div class="cal-sem" aria-hidden="true">' + ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(x => '<span>' + x + '</span>').join('') + '</div><div class="cal-dias">' +
       '<span></span>'.repeat(vazios) + Array.from({ length: nDias }, function (_, i) {
         const iso = A.mes + '-' + String(i + 1).padStart(2, '0');
         const n = (porDia[iso] || []).length;
@@ -1501,7 +1525,7 @@
     const peds = lista('pedidos').filter(p => sts.includes(p.status) && p.dataEntrega && p.dataEntrega >= F.de && p.dataEntrega <= F.ate);
     const nx = C.necessidades(peds, ctxCalc());
     const comEstoque = modoEstoque() !== 'desligado';
-    let h = cab('Lista de compras', 'Ingredientes para os pedidos do período, com receitas dentro de receitas já desmontadas e a perda de cada uma.') + abas(ABAS_PED, '#/compras');
+    let h = cab('Lista de compras', 'Ingredientes para os pedidos do período, com receitas dentro de receitas já desmontadas e a perda de cada uma.') + abas(ABAS_PED, '#/compras') + blocoImportarCompras();
     h += '<section class="bloco"><div class="linha-campos"><label class="campo"><span>De</span><input class="entrada" type="date" data-compras="de" value="' + F.de + '"></label><label class="campo"><span>Até</span><input class="entrada" type="date" data-compras="ate" value="' + F.ate + '"></label></div>' +
       '<div class="acoes" style="margin-top:10px"><button type="button" class="btn sec fino" data-acao="compras-periodo" data-v="7">Próximos 7 dias</button><button type="button" class="btn sec fino" data-acao="compras-periodo" data-v="1">Só amanhã</button></div>' +
       '<label class="chave" style="margin-top:6px"><span class="rot">Incluir orçamentos<small>Para já ter noção, antes de o cliente confirmar</small></span><input type="checkbox" data-compras="orc"' + (F.orc ? ' checked' : '') + '></label></section>';
@@ -2043,7 +2067,7 @@
     let h = cab('Estoque', modo === 'completo' ? 'Modo completo: compras lançadas no Caixa somam e pedidos em produção descontam sozinhos.' : modo === 'manual' ? 'Modo manual: você lança entradas, perdas e contagens; o app avisa o que está acabando.' : '',
       modo === 'desligado' ? '' : (v === 'ingredientes' ? '<a class="btn" href="#/contagem">Contar estoque</a>' : '<button type="button" class="btn" data-acao="vitrine-add">' + I.mais + 'Colocar na vitrine</button>')) + abas(ABAS_PED, '#/estoque');
     if (modo === 'desligado') return h + '<div class="bloco vazio">' + I.emblema + '<h2>Estoque desligado</h2><p>Ligue em Ajustes para acompanhar quanto tem de cada ingrediente, validades e a vitrine de pronta-entrega. Com ele ligado, a lista de compras desconta o que você já tem.</p><a class="btn" href="#/ajustes#estoque">Ir para Ajustes</a></div>';
-    h += '<div class="seg" role="group" aria-label="Tipo de estoque" style="margin-bottom:14px"><a href="#/estoque" aria-pressed="' + (v === 'ingredientes') + '">Ingredientes</a><a href="#/estoque?v=vitrine" aria-pressed="' + (v === 'vitrine') + '">Vitrine</a></div>';
+    h += '<div class="seg" role="group" aria-label="Tipo de estoque" style="margin-bottom:14px"><a href="#/estoque"' + (v === 'ingredientes' ? ' aria-current="true"' : '') + '>Ingredientes</a><a href="#/estoque?v=vitrine"' + (v === 'vitrine' ? ' aria-current="true"' : '') + '>Vitrine</a></div>';
     const sd = saldos(), cf = cfg(), hj = hoje();
     if (v === 'vitrine') {
       const itens = Object.values(sd).filter(x => x.item.startsWith('vit:') && Math.abs(x.qtd) > 1e-9).sort((a, b) => nomeVitrine(a.item).localeCompare(nomeVitrine(b.item), 'pt-BR'));
@@ -2064,7 +2088,7 @@
     const nMin = linhas.filter(l => l.st.abaixoMinimo || l.st.negativo).length, nVal = linhas.filter(l => l.st.vencido || l.st.venceLogo).length;
     const semRegistro = linhas.every(l => !l.x);
     if (semRegistro) h += '<div class="aviso" style="margin-bottom:14px">' + I.alerta + '<div class="txt">Nada contado ainda. Comece por <a href="#/contagem">Contar estoque</a>: informe quanto tem de cada ingrediente hoje' + (modo === 'completo' ? '; daí em diante, compras e produção atualizam sozinhas.' : '.') + '</div></div>';
-    h += '<div class="seg rolavel" role="group" aria-label="Filtrar" style="margin-bottom:12px"><a href="#/estoque" aria-pressed="' + (f === 'todos') + '">Todos</a><a href="#/estoque?f=minimo" aria-pressed="' + (f === 'minimo') + '">Acabando (' + nMin + ')</a><a href="#/estoque?f=validade" aria-pressed="' + (f === 'validade') + '">Validade (' + nVal + ')</a></div>';
+    h += '<div class="seg rolavel" role="group" aria-label="Filtrar" style="margin-bottom:12px"><a href="#/estoque"' + (f === 'todos' ? ' aria-current="true"' : '') + '>Todos</a><a href="#/estoque?f=minimo"' + (f === 'minimo' ? ' aria-current="true"' : '') + '>Acabando (' + nMin + ')</a><a href="#/estoque?f=validade"' + (f === 'validade' ? ' aria-current="true"' : '') + '>Validade (' + nVal + ')</a></div>';
     h += '<div class="linha-campos" style="margin-bottom:12px"><label class="busca"><span class="sr">Buscar ingrediente</span>' + I.busca + '<input class="entrada" id="busca-est" type="search" placeholder="Buscar ingrediente"></label></div>';
     const peso = l => (l.st.negativo || l.st.abaixoMinimo || l.st.vencido || l.st.venceLogo) ? 0 : l.x ? 1 : 2;
     linhas.sort((x, y) => peso(x) - peso(y) || x.ing.nome.localeCompare(y.ing.nome, 'pt-BR'));
@@ -2575,7 +2599,7 @@
     let h = '';
     h += '<section class="bloco" id="reserva"><h2>Reserva</h2><p class="explica">O app não mexe no seu dinheiro: ele calcula quanto separar. Quando transferir para a poupança ou guardar o valor, registre aqui.</p>' +
       '<div class="destaque-reserva"><div class="r">Guardado até hoje</div><div class="v">' + C.brl(rv.saldo) + '</div>' +
-      (rv.meta ? '<div class="meta-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(Math.min(100, rv.saldo / rv.meta * 100)) + '"><i style="width:' + Math.min(100, Math.max(0, rv.saldo / rv.meta * 100)).toFixed(1) + '%"></i></div><div class="r">' + C.pct(Math.max(0, rv.saldo) / rv.meta, 0) + ' da meta de ' + C.brl(rv.meta) + '</div>' : '') + '</div>' +
+      (rv.meta ? '<div class="meta-barra" role="progressbar" aria-label="Quanto da meta da reserva já foi guardado" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(Math.min(100, rv.saldo / rv.meta * 100)) + '"><i style="width:' + Math.min(100, Math.max(0, rv.saldo / rv.meta * 100)).toFixed(1) + '%"></i></div><div class="r">' + C.pct(Math.max(0, rv.saldo) / rv.meta, 0) + ' da meta de ' + C.brl(rv.meta) + '</div>' : '') + '</div>' +
       '<h3 style="margin-top:18px">Em ' + esc(C.nomeMes(mes).split(' ')[0]) + '</h3><dl class="resultados" style="margin-top:8px"><div><dt>Entradas do mês</dt><dd>' + C.brl(rm.entradas) + '</dd></div><div><dt>Separar (' + C.num(rv.pct) + '%)</dt><dd>' + C.brl(rv.sugeridoMes) + '</dd></div><div><dt>Já guardado</dt><dd>' + C.brl(rv.guardadoMes) + '</dd></div><div class="' + (rv.faltaGuardar > 0 ? 'neg' : 'pos') + '"><dt>Falta guardar</dt><dd>' + C.brl(rv.faltaGuardar) + '</dd></div></dl>' +
       '<div class="acoes" style="margin-top:14px">' + (rv.faltaGuardar > 0 ? '<button type="button" class="btn" data-acao="reserva-mov" data-v="guardar">Guardei ' + C.brl(rv.faltaGuardar) + '</button>' : '<button type="button" class="btn sec" data-acao="reserva-mov" data-v="guardar">' + I.mais + 'Guardar um valor</button>') + '<button type="button" class="btn sec" data-acao="reserva-mov" data-v="usar">Usar da reserva</button></div>' +
       '<div class="grade" style="margin-top:16px"><label class="campo"><span>Separar de cada entrada</span><span class="com-prefixo"><input class="entrada num" data-cfg="reservaPct" data-n inputmode="decimal" value="' + inNum(cf.reservaPct) + '"><i class="dir">%</i></span></label>' +
@@ -2660,7 +2684,7 @@
     h += '<section class="bloco"><div class="cab-bloco"><h2>Comparação entre meses</h2><div class="seg" role="group" aria-label="Quantos meses"><button type="button" data-acao="rel-n" data-v="6" aria-pressed="' + (nMeses === 6) + '">6 meses</button><button type="button" data-acao="rel-n" data-v="12" aria-pressed="' + (nMeses === 12) + '">12 meses</button></div></div>' +
       '<div class="legenda" style="margin:6px 0"><span><i class="b-ent"></i>Recebido</span><span><i class="b-sai"></i>Despesas</span></div>' +
       '<div class="graf graf-meses">' + serie.map(r => '<div class="graf-col" title="' + esc(C.nomeMes(r.mes) + ': recebido ' + C.brl(r.recebido) + ', despesas ' + C.brl(r.despesas) + ', lucro ' + C.brl(r.lucro)) + '"><span class="graf-barras"><i class="b-ent" style="height:' + (r.recebido / mx * 100).toFixed(1) + '%"></i><i class="b-sai" style="height:' + (r.despesas / mx * 100).toFixed(1) + '%"></i></span><span class="graf-rot">' + esc(C.nomeMes(r.mes, true).split('/')[0]) + '</span></div>').join('') + '</div>' +
-      '<div class="tabela-rola"><table class="tabela-meses"><thead><tr><th scope="col">Mês</th><th scope="col">Recebido</th><th scope="col">Despesas</th><th scope="col">Lucro</th><th scope="col">Pró-labore</th><th scope="col">Pedidos</th></tr></thead><tbody>' +
+      '<div class="tabela-rola" tabindex="0" role="region" aria-label="Tabela dos meses (role para o lado)"><table class="tabela-meses"><thead><tr><th scope="col">Mês</th><th scope="col">Recebido</th><th scope="col">Despesas</th><th scope="col">Lucro</th><th scope="col">Pró-labore</th><th scope="col">Pedidos</th></tr></thead><tbody>' +
       serie.slice().reverse().map(r => '<tr' + (r.mes === mes ? ' class="atual"' : '') + '><th scope="row">' + esc(C.nomeMes(r.mes, true)) + '</th><td>' + C.brl(r.recebido) + '</td><td>' + C.brl(r.despesas) + '</td><td class="' + (r.lucro < 0 ? 'neg-txt' : '') + '">' + (r.lucro < 0 ? '−' : '') + C.brl(Math.abs(r.lucro)) + '</td><td>' + C.brl(r.retiradas) + '</td><td>' + r.pedidosEntregues + '</td></tr>').join('') + '</tbody></table></div>' +
       '<div class="acoes" style="margin-top:14px"><button type="button" class="btn sec" data-acao="rel-csv">' + I.baixar + 'Exportar relatório (CSV)</button></div></section>';
     return h;
@@ -2723,6 +2747,148 @@
     'definir-metas': folhaMetas,
     'fonte-fixos': function (el) { const c = clone(cfg()); c.custosFixosFonte = el.dataset.v; gravarRegistro('config', c); render(false); }
   };
+
+  // ================= Importar compras de um arquivo CSV =================
+  function jaImportada(g) { const l = S.dados.lancamentos[g.id]; return !!(l && !l.excluidoEm); }
+  function blocoImportarCompras() {
+    return '<section class="bloco barra-import"><div class="txt-import"><b>Já fez as compras?</b><small>Registre várias de uma vez por planilha: baixe o modelo, preencha no Excel ou no Google Planilhas e importe aqui. O preço dos ingredientes se atualiza sozinho.</small></div>' +
+      '<div class="acoes"><button type="button" class="btn sec fino" data-acao="modelo-compras">' + I.baixar + 'Baixar modelo</button><label class="btn fino" style="cursor:pointer">' + I.enviar + 'Importar compras<input type="file" accept=".csv,text/csv,text/plain" id="arq-compras" hidden></label></div></section>';
+  }
+  async function lerArquivoTexto(arq) {
+    const buf = await arq.arrayBuffer();
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+    catch (e) { return new TextDecoder('windows-1252').decode(buf); } // CSV salvo pelo Excel em português
+  }
+  function telaImportarCompras() {
+    const im = S.importacao;
+    let h = '<div class="cab-pagina"><div class="titulos"><a href="#/compras" class="link-btn voltar">' + I.voltar + 'Compras</a><h1>Importar compras</h1>' + (im ? '<p class="sub">' + esc(im.nome) + '</p>' : '') + '</div></div>';
+    if (!im) return h + '<div class="bloco vazio">' + I.emblema + '<h2>Nenhum arquivo aberto</h2><p>Volte para Compras e escolha o arquivo.</p><a class="btn" href="#/compras">Ir para Compras</a></div>';
+    const res = C.interpretarCompras(im.csv, S.dados.ingredientes, im.padroes, im.resolucoes);
+    if (res.semCabecalho) return h + '<div class="aviso neg">' + I.alerta + '<div class="txt">Não encontrei as colunas de ingrediente e valor neste arquivo. Use o modelo: ele já vem com as colunas certas.<br><button type="button" class="link-btn" data-acao="modelo-compras">Baixar modelo</button></div></div>';
+    const novas = res.grupos.filter(g => g.ok && !jaImportada(g)), ja = res.grupos.filter(g => g.ok && jaImportada(g)), erradas = res.grupos.filter(g => !g.ok);
+    const total = novas.reduce((s, g) => s + g.total, 0), nItens = novas.reduce((s, g) => s + g.itens.length, 0);
+    h += '<div class="stats stats-cx"><div class="stat"><div class="r">Compras a importar</div><div class="n">' + novas.length + '</div></div><div class="stat"><div class="r">Total</div><div class="n">' + C.brl(total) + '</div></div><div class="stat"><div class="r">Ingredientes com preço atualizado</div><div class="n">' + nItens + '</div></div></div>';
+    const info = [];
+    if (res.ignoradas) info.push(res.ignoradas + (res.ignoradas === 1 ? ' linha sem quantidade e valor foi ignorada' : ' linhas sem quantidade e valor foram ignoradas') + ' (normal no modelo).');
+    if (res.exemplos) info.push('A linha de exemplo foi ignorada.');
+    if (ja.length) info.push(ja.length + (ja.length === 1 ? ' compra já tinha sido importada e não entra de novo.' : ' compras já tinham sido importadas e não entram de novo.'));
+    if (info.length) h += '<p class="mudo" style="margin:-4px 0 14px">' + info.map(esc).join(' ') + '</p>';
+    h += '<section class="bloco"><h2>Para células em branco</h2><p class="explica">Valem só para linhas sem data, sem local ou sem forma de pagamento. Preencher no arquivo evita importar em dobro depois.</p><div class="grade">' +
+      '<label class="campo"><span>Data</span><input class="entrada" type="date" data-imp="data" value="' + esc(im.padroes.data) + '"></label>' +
+      '<label class="campo"><span>Local ou descrição</span><input class="entrada" data-imp="descricao" value="' + esc(im.padroes.descricao) + '" placeholder="Compra importada"></label>' +
+      '<label class="campo"><span>Forma de pagamento</span><select class="entrada" data-imp="forma">' + Object.keys(C.FORMAS_LANCAMENTO).map(k => '<option value="' + k + '"' + (im.padroes.forma === k ? ' selected' : '') + '>' + C.FORMAS_LANCAMENTO[k] + '</option>').join('') + '</select></label></div></section>';
+    if (res.naoEncontrados.length) {
+      const ings = lista('ingredientes').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      h += '<section class="bloco"><h2>Fora da biblioteca</h2><p class="explica">Estes nomes não batem com nenhum ingrediente. Escolha o que fazer com cada um.</p><div class="lista-contagem">' +
+        res.naoEncontrados.map(function (x) {
+          const dec = im.resolucoes[x.chave] || 'novo';
+          const compat = ings.filter(i => !x.unidade || C.mesmaFamilia(i.unidade, x.unidade));
+          return '<div class="linha-contagem"><div class="principal"><b>' + esc(x.nome) + '</b><small>' + (x.linhas.length === 1 ? 'linha ' : 'linhas ') + x.linhas.join(', ') + '</small></div>' +
+            '<select class="entrada" data-imp-res="' + esc(x.chave) + '" aria-label="O que fazer com ' + esc(x.nome) + '"><option value="novo"' + (dec === 'novo' ? ' selected' : '') + '>Criar ingrediente novo</option><option value="outro"' + (dec === 'outro' ? ' selected' : '') + '>Contar como outro item</option>' +
+            (compat.length ? '<optgroup label="É o mesmo que…">' + compat.map(i => '<option value="' + esc(i.id) + '"' + (dec === i.id ? ' selected' : '') + '>' + esc(i.nome) + '</option>').join('') + '</optgroup>' : '') + '</select></div>';
+        }).join('') + '</div><p class="mudo" style="margin-top:8px">"Contar como outro item" entra no valor da compra, mas não cria ingrediente nem atualiza preço.</p></section>';
+    }
+    if (res.erros.length) {
+      h += '<section class="bloco"><div class="aviso neg">' + I.alerta + '<div class="txt"><b>' + (erradas.length === 1 ? '1 compra tem erro e não será importada.' : erradas.length + ' compras têm erro e não serão importadas.') + '</b> Corrija no arquivo e importe de novo; as compras certas deste arquivo não entram em dobro.<ul>' +
+        res.erros.slice(0, 30).map(e => '<li>Linha ' + e.linha + ': ' + esc(e.msg) + '</li>').join('') + (res.erros.length > 30 ? '<li>e mais ' + (res.erros.length - 30) + '</li>' : '') + '</ul></div></div></section>';
+    }
+    if (res.grupos.length) {
+      const trabalho = {};
+      h += '<section class="bloco"><h2>Compras no arquivo</h2><div class="lista">' + res.grupos.map(function (g) {
+        const st = !g.ok ? '<span class="chip neg">com erro</span>' : jaImportada(g) ? '<span class="chip mudo">já importada</span>' : '<span class="chip pos">' + I.ok + 'vai importar</span>';
+        const linhas = g.itens.map(function (it) {
+          let prev = '';
+          if (g.ok && !jaImportada(g) && it.ingredienteId) {
+            const ing = trabalho[it.ingredienteId] || S.dados.ingredientes[it.ingredienteId];
+            const r = C.aplicarCompra(ing, it, g.data, 'prev:' + g.id + ':' + it.linha);
+            if (r) { trabalho[it.ingredienteId] = r.ing; prev = !r.precoAtualMudou ? 'compra antiga: só entra no histórico' : C.numOk(r.variacao) && Math.abs(r.variacao) >= 0.005 ? (r.variacao > 0 ? 'preço sobe ' : 'preço cai ') + C.pct(Math.abs(r.variacao)) : 'mesmo preço'; }
+          }
+          return '<li><span>' + esc(it.nome) + (it.novo ? ' <span class="chip alerta">novo</span>' : '') + ' <small class="mudo">' + C.num(it.embalagens) + ' × ' + C.num(it.qtdEmbalagem) + ' ' + rotUn(it.unidade) + (prev ? ', ' + prev : '') + '</small></span><b>' + C.brl(it.valor) + '</b></li>';
+        }).join('') + (g.outros > 0 ? '<li><span>Outros itens</span><b>' + C.brl(g.outros) + '</b></li>' : '');
+        return '<div class="item compra-imp"><div class="principal"><div class="nome">' + esc(g.descricao) + '</div><div class="det">' + (g.data ? esc(dataCurta(g.data)) : 'sem data') + (g.forma ? ', ' + esc(formaTxt(g.forma)) : '') + '</div></div><div class="valor">' + C.brl(g.total || 0) + '</div><div class="chips">' + st + '</div>' +
+          (linhas ? '<ul class="historico" style="width:100%">' + linhas + '</ul>' : '') + '</div>';
+      }).join('') + '</div></section>';
+    } else h += '<p class="mudo" style="padding:8px 4px 20px">Nenhuma compra preenchida no arquivo.</p>';
+    h += '<div class="barra-salvar"><span class="estado">' + (novas.length ? '<b style="color:var(--ink)">' + C.brl(total) + '</b><br>' + novas.length + (novas.length === 1 ? ' compra' : ' compras') : 'Nada para importar') + '</span>' +
+      '<button type="button" class="btn sec fino" data-acao="importar-cancelar">Cancelar</button><button type="button" class="btn" data-acao="importar-compras-ok"' + (novas.length ? '' : ' disabled') + '>Importar ' + (novas.length === 1 ? '1 compra' : novas.length + ' compras') + '</button></div>';
+    return h;
+  }
+  function executarImportacao() {
+    const im = S.importacao; if (!im) return;
+    const res = C.interpretarCompras(im.csv, S.dados.ingredientes, im.padroes, im.resolucoes);
+    const grupos = res.grupos.filter(g => g.ok && !jaImportada(g));
+    if (!grupos.length) { toast('Nada para importar.'); return; }
+    // guarda as escolhas "outro item" e "é o mesmo que" para a próxima importação
+    S.meta.decisoesImport = S.meta.decisoesImport || {};
+    Object.keys(im.resolucoes).forEach(k => { if (im.resolucoes[k] !== 'novo') S.meta.decisoesImport[k] = im.resolucoes[k]; });
+    salvarLocal();
+    const trabalho = {}, criados = {}, antes = {};
+    const pegar = id => trabalho[id] || S.dados.ingredientes[id];
+    grupos.forEach(function (g) {
+      const l = { id: g.id, tipo: 'saida', data: g.data, valor: g.total, categoria: fonteCanonica('Ingredientes', 'saida'), descricao: g.descricao, forma: g.forma, obs: 'Importado de ' + im.nome, itensCompra: [], outros: g.outros || null, importado: im.nome };
+      g.itens.forEach(function (it) {
+        let ingId = it.ingredienteId;
+        if (!ingId && it.novo) {
+          const k = C.semAcento(it.nome);
+          if (!criados[k]) {
+            const novo = { id: uid(), nome: it.nome, unidade: it.unidade, qtdEmbalagem: it.qtdEmbalagem, valorPago: C.round2(it.valor / it.embalagens), marca: '', fornecedor: '', obs: 'Criado na importação de compras', historico: [] };
+            trabalho[novo.id] = novo; criados[k] = novo.id;
+          }
+          ingId = criados[k];
+        }
+        if (!ingId) return;
+        if (S.dados.ingredientes[ingId] && !(ingId in antes)) antes[ingId] = C.custoIngrediente(S.dados.ingredientes[ingId]);
+        const item = { id: uid(), ingredienteId: ingId, embalagens: it.embalagens, qtdEmbalagem: it.qtdEmbalagem, unidade: it.unidade, valor: it.valor, validade: it.validade || '' };
+        const r = C.aplicarCompra(pegar(ingId), item, g.data, l.id + ':' + item.id);
+        if (r) trabalho[ingId] = r.ing;
+        l.itensCompra.push(item);
+      });
+      gravarRegistro('lancamentos', l);
+      aplicarEstoqueCompra(l);
+    });
+    Object.values(trabalho).forEach(ing => gravarRegistro('ingredientes', ing));
+    const mud = Object.keys(antes).map(function (id) {
+      const a = antes[id], d = C.custoIngrediente(S.dados.ingredientes[id]);
+      return a && d && a.porBase > 0 ? { nome: S.dados.ingredientes[id].nome, v: d.porBase / a.porBase - 1 } : null;
+    }).filter(x => x && Math.abs(x.v) >= 0.005).sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
+    const nNovos = Object.keys(criados).length;
+    const total = grupos.reduce((s, g) => s + g.total, 0);
+    S.importacao = null;
+    toast((grupos.length === 1 ? '1 compra importada' : grupos.length + ' compras importadas') + ' (' + C.brl(total) + ').' +
+      (nNovos ? ' ' + (nNovos === 1 ? '1 ingrediente novo.' : nNovos + ' ingredientes novos.') : '') +
+      (mud.length ? ' Preços: ' + mud.slice(0, 3).map(x => x.nome + ' ' + (x.v > 0 ? '+' : '−') + C.pct(Math.abs(x.v))).join(', ') + (mud.length > 3 ? ' e mais ' + (mud.length - 3) : '') + '.' : ''), 'Ver no Caixa', () => ir('#/caixa'), 10000);
+    ir('#/compras');
+  }
+  const ACOES_IMPORT = {
+    'modelo-compras': function () {
+      const blob = new Blob([C.modeloCSVCompras(S.dados.ingredientes, hoje())], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'modelo-compras-doce-astro.csv';
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      toast('Modelo baixado. Preencha as linhas do que comprou; as outras podem ficar em branco.');
+    },
+    'importar-compras-ok': executarImportacao,
+    'importar-cancelar': function () { S.importacao = null; ir('#/compras'); }
+  };
+  document.addEventListener('change', async function (e) {
+    const t = e.target;
+    if (t.id === 'arq-compras' && t.files && t.files[0]) {
+      const arq = t.files[0]; t.value = '';
+      let texto;
+      try { texto = await lerArquivoTexto(arq); } catch (err) { toast('Não foi possível ler o arquivo.'); return; }
+      const csv = C.lerCSV(texto);
+      const im = { nome: arq.name, csv: csv, padroes: { data: hoje(), descricao: '', forma: 'pix' }, resolucoes: {} };
+      const lembradas = S.meta.decisoesImport || {};
+      C.interpretarCompras(csv, S.dados.ingredientes, im.padroes, {}).naoEncontrados.forEach(x => {
+        const d = lembradas[x.chave];
+        im.resolucoes[x.chave] = d && (d === 'novo' || d === 'outro' || (S.dados.ingredientes[d] && !S.dados.ingredientes[d].excluidoEm)) ? d : 'novo';
+      });
+      S.importacao = im;
+      if (location.hash === '#/importar-compras') render(false); else ir('#/importar-compras');
+      return;
+    }
+    if (t.dataset && t.dataset.imp && S.importacao) { S.importacao.padroes[t.dataset.imp] = t.value; render(false); return; }
+    if (t.dataset && t.dataset.impRes !== undefined && S.importacao) { S.importacao.resolucoes[t.dataset.impRes] = t.value; render(false); }
+  });
 
   // ================= Ajustes =================
   function telaAjustes() {
@@ -2806,7 +2972,7 @@
     // Backup
     h += '<section class="bloco"><h2>Backup</h2><p class="explica">A planilha já guarda tudo. O backup em arquivo é uma segurança extra, e também serve para levar os dados do modo de teste para outro lugar.</p><div class="acoes"><button type="button" class="btn sec" data-acao="exportar">' + I.baixar + 'Exportar backup (.json)</button><label class="btn sec" style="cursor:pointer">' + I.enviar + 'Importar backup<input type="file" accept="application/json,.json" id="importar" hidden></label></div></section>';
 
-    h += '<p class="mudo" style="text-align:center;margin-top:8px">Espaço Nave ' + VERSAO + '</p>';
+    h += '<p class="mudo" style="text-align:center;margin-top:8px">Espaço Nave ' + VERSAO + '<br><button type="button" class="link-btn" data-acao="procurar-atualizacao">Procurar atualização</button></p>';
     return h;
   }
   function campoPct(rot, cam, v) {
@@ -2945,7 +3111,7 @@
     },
     'dispensar-conflito': function (el) { S.meta.conflitos = S.meta.conflitos.filter(x => x.id !== el.dataset.id); salvarLocal(); render(false); }
   };
-  Object.assign(ACOES, ACOES_PED, ACOES_CAIXA, ACOES_ESTOQUE, ACOES_FIN);
+  Object.assign(ACOES, ACOES_PED, ACOES_CAIXA, ACOES_ESTOQUE, ACOES_FIN, ACOES_IMPORT);
   function resumoDiferencas(a, b) {
     a = a || {}; b = b || {};
     const ks = Array.from(new Set(Object.keys(a).concat(Object.keys(b)))).filter(k => !/Em$|^id$|^historico$/.test(k));
@@ -3000,9 +3166,43 @@
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
     setInterval(() => { if (document.visibilityState === 'visible') sincronizar(); }, 60000);
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      // Versão nova: o service worker baixa em segundo plano; quando assume, o app oferece recarregar.
+      const tinhaControle = !!navigator.serviceWorker.controller;
+      let avisou = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!tinhaControle || avisou) return; // primeira instalação não é atualização
+        avisou = true; avisoAtualizacao();
+      });
+      navigator.serviceWorker.register('sw.js').then(function (reg) {
+        S.swReg = reg;
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+        setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+      }).catch(() => {});
     }
   }
+  function avisoAtualizacao() {
+    if ($('#aviso-versao')) return;
+    const el = document.createElement('div');
+    el.id = 'aviso-versao'; el.className = 'aviso-versao'; el.setAttribute('role', 'status');
+    el.innerHTML = '<span>' + I.girar + 'Nova versão do app pronta.</span><button type="button" class="btn fino">Atualizar agora</button>';
+    el.querySelector('button').onclick = async function () {
+      if (S.editor && S.editor.sujo && !await confirmar('Atualizar agora?', 'As alterações desta tela ainda não foram salvas e seriam perdidas.', 'Atualizar mesmo assim', true)) return;
+      el.querySelector('button').disabled = true;
+      try { await gravarJa(); } catch (e) { /* segue */ }
+      location.reload();
+    };
+    document.body.appendChild(el);
+    document.body.classList.add('com-aviso-versao');
+  }
+  ACOES['procurar-atualizacao'] = function () {
+    const reg = S.swReg;
+    if (!reg) { toast('Neste modo de abertura o app não se atualiza sozinho. Abra pelo endereço do site.'); return; }
+    toast('Procurando atualização…');
+    reg.update().then(function () {
+      if (reg.installing || reg.waiting) toast('Baixando a versão nova. O aviso para atualizar aparece em instantes.');
+      else toast('Você já está na versão mais recente (' + VERSAO + ').');
+    }).catch(() => toast('Sem conexão para procurar atualização agora.'));
+  };
   // Exposto para testes automatizados
   window.__EN = { S: S, C: C, gravarRegistro: gravarRegistro, sincronizar: sincronizar, render: render };
   iniciar();
