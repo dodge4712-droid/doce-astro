@@ -1,0 +1,21 @@
+/* ============ Estoque e produção de vários dias ============ */
+.linha-check .principal small.por-dia { display: block; margin-top: 4px; color: var(--ink-2); line-height: 1.45; }
+.lista-contagem { display: flex; flex-direction: column; gap: 8px; }
+.linha-contagem { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 8px 12px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.linha-contagem .principal { display: flex; flex-direction: column; min-width: 0; }
+.linha-contagem .principal small { color: var(--muted); font-size: calc(12.5px * var(--fs)); }
+.linha-contagem .entrada.num { min-width: 0; }
+.linha-contagem select { flex: 0 1 auto; min-width: 0; }
+@media (max-width: 560px) { .linha-contagem { grid-template-columns: 1fr; } }
+.tabela-compras.com-estoque .tc-cab, .tabela-compras.com-estoque .tc-lin { grid-template-columns: minmax(0, 2fr) 1fr 1fr 1.3fr 1fr; }
+.tc-ok { color: var(--muted); }
+.tc-ok b { font-weight: 600; }
+@media (max-width: 640px) {
+  .tabela-compras.com-estoque .tc-lin { grid-template-columns: 1fr 1fr; }
+  .tabela-compras.com-estoque .tc-lin span[data-r="Comprar"] { grid-column: auto; }
+}
+
+
+.faixa-prod { font-weight: 700; color: var(--ink-2); margin: -6px 0 10px; }
+.vazio .faixa-prod { margin: -2px 0 8px; }
+.acoes .btn { white-space: normal; text-align: center; }

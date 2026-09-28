@@ -1,0 +1,71 @@
+/* ============ Etapa 2 ============ */
+.nav-baixo a span { font-size: calc(11px * var(--fs)); }
+@media (max-width: 360px) { .nav-baixo a span { font-size: calc(10px * var(--fs)); } }
+.abas { display: flex; gap: 4px; margin: -4px 0 18px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.abas::-webkit-scrollbar { display: none; }
+.abas a { flex: 1 0 auto; justify-content: center; padding: 10px 8px; min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; white-space: nowrap; font-size: calc(14px * var(--fs)); }
+.abas a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--caramelo); }
+.seg a { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: calc(13px * var(--fs)); min-height: 38px; color: var(--ink-2); text-decoration: none; white-space: nowrap; }
+.seg a[aria-pressed="true"], .seg a[aria-current="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 0 var(--line-forte); }
+.seg.rolavel { display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+.seg.rolavel::-webkit-scrollbar { display: none; }
+.seg.rolavel button, .seg.rolavel a { flex: none; white-space: nowrap; }
+.chip.tracejado { background: transparent; border: 1px dashed var(--line-forte); }
+.chip.mudo { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.grupo-data { font-family: var(--sans); font-size: calc(12.5px * var(--fs)); font-weight: 700; color: var(--muted); margin: 10px 4px 0; }
+.grupo-data:first-child { margin-top: 0; }
+.cab-bloco { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; margin-bottom: 8px; }
+.cab-bloco h2 { margin: 0; }
+.link-btn.voltar { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.link-btn.mini { min-height: 0; padding: 0 0 0 10px; font-size: calc(12.5px * var(--fs)); color: var(--neg); }
+.linha-cliente { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-start; }
+.linha-cliente .principal { flex: 1 1 220px; }
+.linha-cliente .nome { font-weight: 700; font-size: calc(16px * var(--fs)); }
+.linha-cliente .det { color: var(--muted); }
+.linha-ped { grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr)); align-items: end; }
+.linha-ped .nome-it, .linha-ped .nome-av { grid-column: 1 / -1; }
+.linha-ped .tot-it { display: flex; flex-direction: column; justify-content: flex-end; min-height: 44px; }
+.linha-ped .tot-it .mudo { font-size: calc(12.5px * var(--fs)); font-weight: 600; }
+.linha-ped .btn-icone { justify-self: end; }
+.painel .btn { background: var(--on-choco); color: var(--choco); }
+/* Calendário */
+.cal-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.cal-cab h2 { margin: 0; text-align: center; flex: 1; }
+.cal-sem, .cal-dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-sem span { text-align: center; font-size: calc(12px * var(--fs)); font-weight: 700; color: var(--muted); padding: 4px 0; }
+.cal-dia { position: relative; aspect-ratio: 1 / 1; min-width: 0; min-height: 34px; border: 1px solid transparent; border-radius: 12px; background: var(--surface-2); color: var(--ink); font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0; }
+.cal-dia.hoje { border-color: var(--caramelo); }
+.cal-dia.sel { background: var(--choco); color: var(--on-choco); }
+.cal-dia i { font-style: normal; font-size: calc(11px * var(--fs)); min-width: 20px; padding: 0 5px; border-radius: 999px; background: var(--caramelo); color: #FFFFFF; line-height: 1.6; }
+:root[data-theme="dark"] .cal-dia i { color: #1A0A02; }
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] .cal-dia i { color: #1A0A02; } }
+.cal-dia.sel i { background: var(--on-choco); color: var(--choco); }
+@media (min-width: 700px) { .cal-dia { aspect-ratio: auto; min-height: 64px; } }
+/* Produção */
+.lista-check { display: flex; flex-direction: column; gap: 8px; }
+.linha-check { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); cursor: pointer; }
+.linha-check input { width: 24px; height: 24px; accent-color: var(--pos); flex: none; }
+.linha-check .principal { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.linha-check .principal small { color: var(--muted); font-size: calc(12.5px * var(--fs)); }
+.linha-check .principal small:empty { display: none; }
+.linha-check .valor { text-align: right; font-weight: 700; font-size: calc(16px * var(--fs)); }
+.linha-check .valor small { display: block; color: var(--muted); font-weight: 500; font-size: calc(12.5px * var(--fs)); }
+.linha-check.feito .principal b, .linha-check.feito .valor { text-decoration: line-through; color: var(--muted); }
+/* Compras */
+.tabela-compras { display: flex; flex-direction: column; }
+.tc-cab, .tc-lin { display: grid; grid-template-columns: minmax(0, 2fr) 1fr 1.3fr 1fr; gap: 10px; padding: 10px 4px; align-items: baseline; }
+.tc-cab { font-size: calc(12px * var(--fs)); font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--line-forte); }
+.tc-lin { border-bottom: 1px solid var(--line); }
+.tc-lin span:last-child, .tc-cab span:last-child { text-align: right; }
+.tc-total { border-bottom: 0; }
+@media (max-width: 640px) {
+  .tc-cab { display: none; }
+  .tc-lin { grid-template-columns: 1fr 1fr; gap: 2px 10px; }
+  .tc-lin span:first-child { grid-column: 1 / -1; }
+  .tc-lin span[data-r]::before { content: attr(data-r) ": "; color: var(--muted); font-size: calc(12.5px * var(--fs)); }
+  .tc-lin span[data-r="Custo"] { grid-column: 1 / -1; text-align: left; }
+  .tc-total span:last-child { grid-column: 1 / -1; text-align: left; }
+}
+.dados-cli { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px 20px; margin: 0; }
+.dados-cli dt { font-size: calc(12.5px * var(--fs)); font-weight: 700; color: var(--muted); }
+.dados-cli dd { margin: 2px 0 0; white-space: pre-wrap; }
