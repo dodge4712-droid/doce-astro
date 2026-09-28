@@ -104,7 +104,7 @@ export function folhaVitrine(modo, item) {
           const [, rid, vid] = item.split(':');
           const ped = { id: uid(), clienteId: cli.id, clienteNome: cli.nome, status: 'entregue', tipoEntrega: 'retirada', dataEntrega: hoje(), horaEntrega: '', endereco: '', taxaEntrega: null,
             itens: [{ id: uid(), tipo: 'rec', receitaId: rid, variacaoId: vid, nome: nomeVitrine(item), qtd: n, precoUnit: pu, maoObraUnit: C.maoObraItemPedido({ tipo: 'rec', receitaId: rid, variacaoId: vid }, ctxCalc()) }], desconto: null, formaPagamento: 'pix', pagamentos: [],
-            obs: 'Venda da vitrine no fiado', historicoStatus: [{ status: 'entregue', em: agoraISO() }] };
+            obs: 'Venda da vitrine no fiado', origem: 'vitrine', historicoStatus: [{ status: 'entregue', em: agoraISO() }] };
           const cp = calcPed(ped); ped.total = cp.total; ped.pago = 0; ped.restante = cp.total; ped.situacaoPagamento = 'pendente';
           gravarRegistro('pedidos', ped);
           registrarMov(item, -n, 'venda', { ref: 'vendaped:' + ped.id, obs: 'Fiado: ' + cli.nome });

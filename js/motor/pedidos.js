@@ -43,6 +43,14 @@ export function maoObraItemPedido(it, ctx) {
   const v = (calcularReceita(rec, ctx).variacoes || []).find(x => x.id === it.variacaoId);
   return v && numOk(v.maoObra) ? v.maoObra : 0;
 }
+export function fixosItemPedido(it, ctx) {
+  if (it.tipo !== 'rec') return 0;
+  if (numOk(it.fixosUnit)) return it.fixosUnit;
+  const rec = ctx.receitas[it.receitaId];
+  if (!rec || rec.excluidoEm) return 0;
+  const v = (calcularReceita(rec, ctx).variacoes || []).find(x => x.id === it.variacaoId);
+  return v && numOk(v.fixos) ? v.fixos : 0;
+}
 export function calcularPedido(p, ctx) {
   const cfg = mesclarConfig(ctx.config);
   let subtotal = 0, custo = 0, custoCompleto = true;

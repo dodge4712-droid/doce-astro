@@ -17,7 +17,7 @@ export function calcularReceita(rec, ctx, pilha) {
   const itens = [];
   let custoIng = 0;
   let temCiclo = false;
-  let maoObraSub = 0;
+  let maoObraSub = 0, fixosSub = 0;
 
   if (pilha.indexOf(rec.id) >= 0) {
     return { erroCiclo: true, avisos: ['Receita usa a si mesma em cadeia.'] };
@@ -42,7 +42,7 @@ export function calcularReceita(rec, ctx, pilha) {
           else {
             const porBase = it.modo === 'preco' ? r.precoInternoPorBase : r.custoPorBase;
             if (!numOk(porBase)) aviso = 'Receita base sem preço de venda calculável';
-            else { custo = porBase * qtdBase; if (numOk(r.maoObraPorBase)) maoObraSub += r.maoObraPorBase * qtdBase; }
+            else { custo = porBase * qtdBase; if (numOk(r.maoObraPorBase)) maoObraSub += r.maoObraPorBase * qtdBase; if (numOk(r.fixosPorBase)) fixosSub += r.fixosPorBase * qtdBase; }
           }
         }
       }
@@ -84,6 +84,8 @@ export function calcularReceita(rec, ctx, pilha) {
 
   const custoLote = custoIng + perdaValor + diretos + fixos + maoObra;
   const maoObraEmbutida = maoObra + (perda > 0 && perda < 1 ? maoObraSub / (1 - perda) : maoObraSub);
+  // parte das contas fixas embutida no preço: a própria e a das receitas usadas dentro desta
+  const fixosEmbutidos = fixos + (perda > 0 && perda < 1 ? fixosSub / (1 - perda) : fixosSub);
 
   const rend = rec.rendimento || {};
   const rendBase = paraBase(rend.qtd, rend.unidade);
@@ -93,19 +95,20 @@ export function calcularReceita(rec, ctx, pilha) {
   else avisos.push('Informe o rendimento para calcular o custo por unidade.');
 
   const maoObraPorBase = numOk(rendBase) && rendBase > 0 ? maoObraEmbutida / rendBase : null;
+  const fixosPorBase = numOk(rendBase) && rendBase > 0 ? fixosEmbutidos / rendBase : null;
   const custoVariavelPorBase = numOk(rendBase) && rendBase > 0 ? (custoIng + perdaValor + diretos) / rendBase : null;
   const margem = margemDaReceita(rec, cfg);
   const precoInternoPorBase = numOk(custoPorBase) && numOk(margem) && margem < 1 ? custoPorBase / (1 - margem) : null;
 
   const vars = (rec.variacoes && rec.variacoes.length ? rec.variacoes : []).map(function (v) {
-    return calcularVariacao(v, { maoObraPorBase: maoObraPorBase, custoVariavelPorBase: custoVariavelPorBase, custoPorBase: custoPorBase, unBase: unBase, rendUn: rend.unidade, alvo: alvoDaReceita(rec, cfg), taxas: rec.taxas || {}, cfg: cfg });
+    return calcularVariacao(v, { fixosPorBase: fixosPorBase, maoObraPorBase: maoObraPorBase, custoVariavelPorBase: custoVariavelPorBase, custoPorBase: custoPorBase, unBase: unBase, rendUn: rend.unidade, alvo: alvoDaReceita(rec, cfg), taxas: rec.taxas || {}, cfg: cfg });
   });
 
   return {
     itens: itens, custoIngredientes: custoIng, perdaValor: perdaValor, diretos: diretos,
     fixos: fixos, maoObra: maoObra, custoLote: custoLote, horas: horas,
     rendimentoBase: rendBase, unidadeBase: unBase, custoPorBase: custoPorBase, custoVariavelPorBase: custoVariavelPorBase,
-    maoObraEmbutida: maoObraEmbutida, maoObraPorBase: maoObraPorBase,
+    maoObraEmbutida: maoObraEmbutida, maoObraPorBase: maoObraPorBase, fixosEmbutidos: fixosEmbutidos, fixosPorBase: fixosPorBase,
     margem: margem, markup: margemParaMarkup(margem), temCiclo: temCiclo,
     precoInternoPorBase: precoInternoPorBase, variacoes: vars, avisos: avisos
   };
@@ -132,6 +135,7 @@ export function calcularVariacao(v, o) {
   r.custo = o.custoPorBase * qBase + emb;
   r.custoVariavel = numOk(o.custoVariavelPorBase) ? o.custoVariavelPorBase * qBase + emb : null;
   r.maoObra = numOk(o.maoObraPorBase) ? o.maoObraPorBase * qBase : null;
+  r.fixos = numOk(o.fixosPorBase) ? o.fixosPorBase * qBase : null;
   const t = o.taxas || {};
   const tPct = (taxaCartaoPct(o.cfg, t.cartao) + (t.app ? (o.cfg.taxas.app || 0) : 0)) / 100;
   const tFix = t.entrega ? (o.cfg.taxas.entrega || 0) : 0;

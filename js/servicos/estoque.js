@@ -55,7 +55,8 @@ export function aplicarEstoqueCompra(l, excluindo) {
 // Colocar na vitrine (no modo completo, desconta os ingredientes usados)
 export function colocarNaVitrine(chave, n, validade, obs) {
   const [, rid, vid] = chave.split(':');
-  const m = registrarMov(chave, n, 'vitrine', { validade: validade || '', obs: obs || '' });
+  const fixosUnit = C.fixosItemPedido({ tipo: 'rec', receitaId: rid, variacaoId: vid }, ctxCalc()); // parte das contas fixas no momento
+  const m = registrarMov(chave, n, 'vitrine', { validade: validade || '', obs: obs || '', fixosUnit: fixosUnit });
   if (modoEstoque() === 'completo' && m) {
     const bx = C.baixaDoPedido({ itens: [{ tipo: 'rec', receitaId: rid, variacaoId: vid, qtd: n }] }, ctxCalc());
     Object.keys(bx).forEach(id => registrarMov(C.chaveIng(id), -bx[id], 'producao', { ref: 'vit:' + m.id, obs: 'Vitrine: ' + nomeVitrine(chave) }));

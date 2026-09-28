@@ -56,6 +56,8 @@ export function telaRelatorios() {
       '<details class="ajuda"><summary>Como é feita essa conta?</summary><div><p>De cada R$ 100 vendidos ' + rotBase + ', cerca de ' + C.brl(pe.margemContribuicao * 100) + ' sobram depois de ingredientes, perdas e embalagens. É a margem de contribuição (' + C.pct(pe.margemContribuicao, 0) + ').</p><p>Dividindo o que precisa ser coberto todo mês (' + C.brl(pe.custosACobrir) + ') por essa margem, chega-se ao valor de vendas que empata as contas. As contas fixas vêm de Ajustes → Custos fixos (' + (cf.custosFixosFonte === 'contas' && C.numOk(cf.mediaContasFixas) ? 'média das contas pagas' : 'valores preenchidos à mão') + ').</p></div></details>'
     : '') + (pe.valor && !(fixos > 0) && C.numOk(mediaContas().media) ? '<div class="aviso" style="margin-top:12px">' + I.alerta + '<div class="txt">Os custos fixos preenchidos à mão estão em R$ 0,00. Pelas contas pagas, a média é ' + C.brl(mediaContas().media) + ' por mês. <a href="#/ajustes#fixos">Escolher em Ajustes</a></div></div>' : '') + (pe.valor ? '' : '<p class="mudo">' + (!(fixos > 0) && !(pl > 0) ? 'Preencha os custos fixos e o pró-labore em Ajustes para calcular.' : 'Precisa de vendas entregues (pedidos ou vitrine) para calcular a margem.') + '</p>') + '</section>';
 
+  h += blocoContasFixas(mes, lim);
+
   // Mais vendidos e mais lucrativos
   const topQ = prods.slice().sort((a, b) => b.qtd - a.qtd).slice(0, 8), topL = prods.filter(p => C.numOk(p.lucro)).sort((a, b) => b.lucro - a.lucro).slice(0, 8);
   const ranking = (t, lst, val, fmt, cls) => { const mx = Math.max(0.01, ...lst.map(val)); return '<section class="bloco"><h2>' + t + '</h2>' + (lst.length ? '<div class="por-fonte">' + lst.map(p => '<div class="linha-fonte" style="cursor:default"><span class="nome-f">' + esc(p.nome) + '</span><span class="val-f">' + fmt(p) + '</span><span class="barra-f"><i class="' + cls + '" style="width:' + (Math.max(0, val(p)) / mx * 100).toFixed(1) + '%"></i></span></div>').join('') + '</div>' : '<p class="mudo">Nenhuma venda entregue neste mês.</p>') + '</section>'; };
@@ -102,3 +104,32 @@ export const ACOES_RELATORIOS = {
   },
   'definir-metas': folhaMetas
 };
+
+// Contas fixas cobertas pelas receitas feitas no mês (pedidos entregues e vitrine)
+export function blocoContasFixas(mes, lim) {
+  const r = C.contasFixasCobertas(lista('pedidos'), lista('estoque'), ctxCalc(), lim.de, lim.ate);
+  const nomeMes = C.nomeMes(mes).split(' ')[0];
+  let h = '<section class="bloco" id="contas-fixas-rel"><h2>Contas fixas cobertas pelas receitas</h2>';
+  if (!(r.totalAjustes > 0)) {
+    return h + '<p class="mudo">Cadastre as contas do mês (aluguel, luz, gás, água…) em <a href="#/ajustes#fixos">Ajustes → Custos fixos</a> para ver quanto de cada uma as receitas cobrem.</p></section>';
+  }
+  const pct = Math.max(0, r.pct);
+  h += '<p class="explica">Cada preço traz uma parte das contas fixas. Somando tudo o que foi feito em ' + esc(nomeMes) + ' (pedidos entregues e doces colocados na vitrine), as receitas cobriram:</p>' +
+    '<div class="destaque-reserva"><div class="r">Coberto em ' + esc(nomeMes) + '</div><div class="v">' + C.brl(r.coberto) + '</div>' +
+    '<div class="meta-barra" role="progressbar" aria-label="Quanto das contas fixas do mês foi coberto" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(Math.min(100, pct * 100)) + '"><i style="width:' + Math.min(100, pct * 100).toFixed(1) + '%"></i></div>' +
+    '<div class="r">' + C.pct(pct, 0) + ' dos ' + C.brl(r.totalAjustes) + ' das contas do mês' + (r.falta > 0 ? '. Faltam ' + C.brl(r.falta) + '.' : '. Tudo coberto!') + '</div></div>';
+  if (C.numOk(r.horas) && r.horas > 0) h += '<p class="mudo" style="margin-top:8px">Isso equivale a ' + C.num(r.horas, 1) + ' h de produção, das ' + C.num(r.horasMes) + ' h por mês previstas em Ajustes.</p>';
+  h += '<div class="lista-contas-fixas">' + r.porConta.map(function (c) {
+    const p = Math.max(0, Math.min(1, c.pct));
+    return '<div class="linha-conta-fixa"><div class="cab-bloco" style="margin:0"><b>' + esc(c.nome) + '</b><span>' + C.brl(c.coberto) + ' <small class="mudo">de ' + C.brl(c.valor) + '</small></span></div>' +
+      '<div class="meta-barra"><i style="width:' + (p * 100).toFixed(1) + '%"></i></div>' +
+      '<small class="' + (c.falta > 0 ? 'mudo' : 'pos-txt') + '">' + (c.falta > 0 ? C.pct(p, 0) + ' coberto, faltam ' + C.brl(c.falta) : 'coberta') + '</small></div>';
+  }).join('') + '</div>';
+  if (r.usaContasPagas) h += '<p class="mudo" style="margin-top:10px">O preço das receitas usa a média das contas pagas (' + C.brl(r.totalNoPreco) + ' por mês); a divisão acima usa os valores de Ajustes → Custos fixos.</p>';
+  h += '<details class="ajuda"><summary>Como é calculado?</summary><div>' +
+    '<p>O custo fixo por hora (' + C.brl(r.taxaHora) + ') é o total das contas dividido pelas horas de produção por mês. Cada receita leva a parte do tempo dela, incluindo o das receitas usadas dentro de outras. O valor fica guardado quando o doce é feito: mudar os tempos ou as contas depois não muda os meses anteriores.</p>' +
+    '<p style="margin-top:8px">O total coberto é dividido entre as contas na proporção do valor de cada uma.</p>' +
+    (r.porProduto.length ? '<ul class="historico" style="margin-top:8px">' + r.porProduto.slice(0, 10).map(x => '<li><span>' + esc(x.nome) + ' <small class="mudo">' + C.brl(x.porUnidade) + ' × ' + C.num(x.qtd) + '</small></span><b>' + C.brl(x.coberto) + '</b></li>').join('') + '</ul>' : '<p class="mudo">Nada foi feito neste mês ainda.</p>') +
+    '</div></details></section>';
+  return h;
+}

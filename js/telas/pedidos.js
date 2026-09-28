@@ -212,6 +212,7 @@ export function salvarPedido(msg) {
   p.itens.forEach(function (it) {
     if (it.tipo !== 'rec') return;
     if (p.status !== 'entregue' || !C.numOk(it.maoObraUnit)) it.maoObraUnit = C.maoObraItemPedido(Object.assign({}, it, { maoObraUnit: null }), ctxPl);
+    if (p.status !== 'entregue' || !C.numOk(it.fixosUnit)) it.fixosUnit = C.fixosItemPedido(Object.assign({}, it, { fixosUnit: null }), ctxPl);
   });
   // Resumo em colunas simples: aparece legível na planilha e servirá aos relatórios.
   p.total = c.total; p.pago = c.pago; p.restante = c.restante; p.lucroEstimado = c.lucro; p.situacaoPagamento = c.situacao;
