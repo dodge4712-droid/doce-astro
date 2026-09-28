@@ -1,0 +1,4 @@
+{
+  "//": "Declara que o código do app é módulo ES (import/export). Não é usado pelo navegador.",
+  "type": "module"
+}
