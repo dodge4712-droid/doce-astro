@@ -607,12 +607,18 @@
     });
     return { modo: modo, baldes: baldes };
   }
+  function celulaCSV(v) {
+    let s = String(v === null || v === undefined ? '' : v);
+    // Prefixa com ' o que pode virar fórmula, EXCETO números negativos puros (ex.: -1200,00)
+    if (/^[\s\u0000-\u001F]*[=+\-@]/.test(s) && !/^-?\d+(?:[.,]\d+)?$/.test(s)) s = "'" + s;
+    return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
   function csvMovimentos(lst) {
-    const c = v => { const s = String(v === null || v === undefined ? '' : v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const c = celulaCSV;
     const linhas = [['Data', 'Tipo', 'Fonte', 'Descrição', 'Forma de pagamento', 'Valor'].join(';')];
     lst.slice().sort((a, b) => String(a.data).localeCompare(String(b.data))).forEach(function (m) {
-      linhas.push([m.data.split('-').reverse().join('/'), m.tipo === 'entrada' ? 'Entrada' : 'Saída', c(m.fonte), c(m.descricao),
-        c(FORMAS_LANCAMENTO[m.forma] || m.forma || ''), ((m.tipo === 'saida' ? -1 : 1) * m.valor).toFixed(2).replace('.', ',')].join(';'));
+      linhas.push([c(m.data.split('-').reverse().join('/')), m.tipo === 'entrada' ? 'Entrada' : 'Saída', c(m.fonte), c(m.descricao),
+        c(FORMAS_LANCAMENTO[m.forma] || m.forma || ''), c(((m.tipo === 'saida' ? -1 : 1) * m.valor).toFixed(2).replace('.', ','))].join(';'));
     });
     return '\ufeff' + linhas.join('\r\n');
   }
@@ -904,7 +910,7 @@
   }
   function csvRelatorio(serie, ranking) {
     const d = v => numOk(v) ? v.toFixed(2).replace('.', ',') : '';
-    const c = v => { const s = String(v === null || v === undefined ? '' : v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const c = celulaCSV;
     const L = ['Mês;Recebido;Despesas;Lucro;Pró-labore;Guardado na reserva;Pedidos entregues;Vendido em pedidos;Ticket médio'];
     serie.forEach(r => L.push([nomeMes(r.mes), d(r.recebido), d(r.despesas), d(r.lucro), d(r.retiradas), d(r.guardado), r.pedidosEntregues, d(r.vendido), d(r.ticketMedio)].join(';')));
     if (ranking && ranking.length) {
@@ -1115,7 +1121,7 @@
     return res;
   }
   function modeloCSVCompras(ingredientes, hoje) {
-    const c = v => { const s = String(v === null || v === undefined ? '' : v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const c = celulaCSV;
     const L = ['Data;Local ou descrição;Ingrediente;Embalagens;Tamanho da embalagem;Unidade;Valor pago no item;Forma de pagamento;Validade'];
     const d = hoje ? hoje.split('-').reverse().join('/') : '';
     L.push([d, 'EXEMPLO (apague esta linha)', 'Leite condensado', '4', '395', 'g', '27,96', 'Pix', ''].join(';'));
