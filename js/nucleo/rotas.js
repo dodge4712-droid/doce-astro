@@ -9,6 +9,7 @@ import { telaAgenda } from '../telas/agenda.js';
 import { telaAjustes } from '../telas/ajustes.js';
 import { telaBoasVindas } from '../telas/boas-vindas.js';
 import { telaCaixa } from '../telas/caixa.js';
+import { montarTelaCardapio, telaCardapio } from '../telas/cardapio.js';
 import { montarFiltroClientes, telaCliente, telaClientes } from '../telas/clientes.js';
 import { telaCompras, telaComprasFeitas } from '../telas/compras.js';
 import { telaContas } from '../telas/contas.js';
@@ -40,7 +41,7 @@ export function trocarEnderecoSemDesenhar(h) { ignorarHash = true; location.hash
 export function secaoAtiva(h) {
   if (/^#\/lancamento\/[^?]*\?(.*&)?(compra=1|de=compras)/.test(h)) return '#/pedidos'; // compra aberta pela Loja
   const r = h.split('?')[0].replace(/^(#\/[^#]*)#.*$/, '$1');
-  if (r.startsWith('#/receita') || r === '#/ingredientes') return '#/receitas';
+  if (r.startsWith('#/receita') || r === '#/ingredientes' || r === '#/cardapio') return '#/receitas';
   if (r.startsWith('#/pedido') || ['#/agenda', '#/producao', '#/compras', '#/importar-compras', '#/estoque', '#/contagem'].includes(r)) return '#/pedidos';
   if (r.startsWith('#/cliente')) return '#/clientes';
   if (r === '#/caixa' || r.startsWith('#/lancamento') || ['#/contas', '#/receber', '#/reserva', '#/prolabore', '#/relatorios'].includes(r)) return '#/caixa';
@@ -79,6 +80,7 @@ export function render(trocouRota) {
     case 'receitas': html = telaReceitas(); break;
     case 'receita': html = telaEditorReceita(decodeURIComponent(partes[1] || 'nova')); break;
     case 'ingredientes': html = telaIngredientes(); break;
+    case 'cardapio': html = telaCardapio(); break;
     case 'pedidos': html = telaPedidos(q); break;
     case 'pedido': html = telaEditorPedido(decodeURIComponent(partes[1] || 'novo'), q); break;
     case 'agenda': html = telaAgenda(); break;
@@ -117,6 +119,7 @@ export function render(trocouRota) {
   if (partes[0] === 'lancamento') montarEditorLancamento();
   if (partes[0] === 'estoque') montarFiltroEstoque();
   if (partes[0] === 'contagem') montarContagem();
+  if (partes[0] === 'cardapio') montarTelaCardapio();
 }
 
 // Eventos globais desta parte (registrados uma vez, no arranque)

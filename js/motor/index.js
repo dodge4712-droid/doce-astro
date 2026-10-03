@@ -17,3 +17,5 @@ export { lerCSV, lerDataBR, interpretarCompras, modeloCSVCompras } from './impor
 export { semAcento } from './texto.js';
 export { custoIngrediente, variacaoPreco, aplicarCompra, removerCompra } from './ingredientes.js';
 export { contasFixasCobertas } from './contas-fixas.js';
+export { LIMITES_CARDAPIO, TEMAS_CARDAPIO, cardapioPadrao, normalizarCardapio, itemDaReceita, adicionarAoCardapio, totalItensCardapio, cardapioParaImagem } from './cardapio.js';
+export { STORIES, CORES_CARDAPIO, FONTES_CARDAPIO, quebrarLinhas, linhasEquilibradas, paginasCardapio } from './cardapio-imagem.js';

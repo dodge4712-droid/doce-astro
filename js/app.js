@@ -8,6 +8,7 @@ import { ACOES_AGENDA } from './telas/agenda.js';
 import { ACOES_AJUSTES, atualizarEstadoAjustes } from './telas/ajustes.js';
 import { ACOES_BOAS_VINDAS } from './telas/boas-vindas.js';
 import { ACOES_CAIXA } from './telas/caixa.js';
+import { ACOES_CARDAPIO } from './telas/cardapio.js';
 import { ACOES_CLIENTES } from './telas/clientes.js';
 import { ACOES_COMPRAS, eventosCompras } from './telas/compras.js';
 import { ACOES_CONTAS } from './telas/contas.js';
@@ -87,6 +88,7 @@ function ligar() {
   registrarAcoes('ajustes', ACOES_AJUSTES);
   registrarAcoes('boas-vindas', ACOES_BOAS_VINDAS);
   registrarAcoes('caixa', ACOES_CAIXA);
+  registrarAcoes('cardapio', ACOES_CARDAPIO);
   registrarAcoes('clientes', ACOES_CLIENTES);
   registrarAcoes('compras', ACOES_COMPRAS);
   registrarAcoes('contas', ACOES_CONTAS);

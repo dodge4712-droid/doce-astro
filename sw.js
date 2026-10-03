@@ -1,6 +1,6 @@
 /* Espaço Nave — service worker: abre o app sem internet.
    A versão e a lista CASCA são geradas por ferramentas/atualizar-cache.js: não edite à mão. */
-const VERSAO = 'espaco-nave-v6.1.0';
+const VERSAO = 'espaco-nave-v6.2.0';
 const CASCA = [
   './',
   './css/01-tokens.css',
@@ -15,6 +15,7 @@ const CASCA = [
   './css/10-importar-compras.css',
   './css/11-aviso-versao.css',
   './css/12-vitrine.css',
+  './css/13-cardapio.css',
   './css/99-ajustes-finais.css',
   './icons/apple-touch-icon.png',
   './icons/favicon-64.png',
@@ -25,6 +26,8 @@ const CASCA = [
   './index.html',
   './js/app.js',
   './js/motor/caixa.js',
+  './js/motor/cardapio-imagem.js',
+  './js/motor/cardapio.js',
   './js/motor/config.js',
   './js/motor/contas-fixas.js',
   './js/motor/datas.js',
@@ -53,6 +56,7 @@ const CASCA = [
   './js/nucleo/sincronizacao.js',
   './js/nucleo/util.js',
   './js/servicos/caixa.js',
+  './js/servicos/cardapio.js',
   './js/servicos/estoque.js',
   './js/servicos/financeiro.js',
   './js/servicos/pedidos.js',
@@ -60,6 +64,8 @@ const CASCA = [
   './js/telas/ajustes.js',
   './js/telas/boas-vindas.js',
   './js/telas/caixa.js',
+  './js/telas/cardapio-imagem.js',
+  './js/telas/cardapio.js',
   './js/telas/clientes.js',
   './js/telas/compras.js',
   './js/telas/contas.js',

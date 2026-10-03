@@ -331,7 +331,7 @@ export function salvarReceita() {
   render(false);
   return true;
 }
-export const ABAS_REC = [['#/receitas', 'Receitas'], ['#/ingredientes', 'Ingredientes']];
+export const ABAS_REC = [['#/receitas', 'Receitas'], ['#/ingredientes', 'Ingredientes'], ['#/cardapio', 'Cardápio']];
 
 // Ações dos botões desta parte (data-acao="...")
 export const ACOES_RECEITAS = {

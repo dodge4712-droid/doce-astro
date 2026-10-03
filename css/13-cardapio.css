@@ -1,0 +1,40 @@
+/* ============ Cardápio (montar e exportar em imagem) ============ */
+.cardapio-ed { display: grid; gap: 16px; }
+.cardapio-ed > * { min-width: 0; }
+.previa-col { order: -1; } /* no celular, a prévia vem primeiro */
+@media (min-width: 1000px) {
+  .cardapio-ed { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; }
+  .previa-col { order: 0; position: sticky; top: 90px; }
+}
+.moldura-previa { display: flex; justify-content: center; margin-bottom: 12px; }
+.moldura-previa canvas { width: 100%; max-width: 300px; height: auto; aspect-ratio: 9 / 16; border-radius: 18px; box-shadow: var(--sombra); background: var(--surface-2); }
+.paginas-previa { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px; font-weight: 600; font-size: calc(13.5px * var(--fs)); }
+#previa-cardapio .acoes { justify-content: center; }
+.dica-previa { margin-top: 12px; font-size: calc(12.5px * var(--fs)); text-align: center; }
+
+.amostra-tema { display: inline-block; width: 14px; height: 14px; border-radius: 50%; margin-right: 6px; vertical-align: -2px; border: 1px solid var(--line-forte); }
+.amostra-tema.tema-chocolate { background: linear-gradient(135deg, #401900 55%, #F7C303 56%); }
+.amostra-tema.tema-creme { background: linear-gradient(135deg, #FEF0ED 55%, #B8742A 56%); }
+#cardapio-aparencia .chave { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+
+.cat-cardapio { margin-top: 18px; }
+.cat-cardapio > .cab-bloco { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.cat-cardapio h3 { overflow-wrap: anywhere; min-width: 0; }
+.acoes-mini { display: flex; gap: 4px; align-items: center; }
+.acoes-mini .btn-icone:disabled, .item-cardapio .btn-icone:disabled { opacity: .3; cursor: default; }
+.item-cardapio { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); margin-top: 8px; }
+.item-cardapio.desligado { opacity: .55; }
+.item-cardapio .info { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.item-cardapio .det { color: var(--muted); font-size: calc(13px * var(--fs)); }
+.item-cardapio .precos { font-size: calc(13px * var(--fs)); color: var(--ink-2); margin-top: 2px; }
+.item-cardapio .ctrl { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.item-cardapio .interruptor { margin-right: 6px; }
+
+.ops-item { display: flex; flex-direction: column; gap: 8px; }
+.linha-opcao { display: grid; grid-template-columns: minmax(0, 1fr) 130px auto; gap: 8px; align-items: center; }
+
+/* Interruptor em forma de botão (liga e desliga na hora, sem formulário) */
+.interruptor { appearance: none; border: 0; padding: 0; width: 48px; height: 28px; border-radius: 999px; background: var(--line-forte); position: relative; flex: none; }
+.interruptor::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); transition: transform .15s; }
+.interruptor[aria-checked="true"] { background: var(--pos); }
+.interruptor[aria-checked="true"]::after { transform: translateX(20px); }
