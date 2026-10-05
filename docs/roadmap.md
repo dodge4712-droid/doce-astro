@@ -19,7 +19,7 @@ Regra para todo item: **ponytail** (YAGNI → reuso → stdlib → solução mí
 | 3 | P0 | README curto: rodar localmente, publicar, instalar a planilha | Orquestrador | 1, 2 |
 | 4 | P0 | Testes do motor com `node:test` (receitas, pedidos, estoque, caixa, financeiro) | QA | — |
 | 5 | P0 | CI no GitHub Actions: `node --check` + `node --test` | QA | 4 |
-| 6 | P0 | Passar a trabalhar por PR em vez de upload direto na `main` | Orquestrador | Decisão do usuário (ADR-006) |
+| 6 | P0 | Passar a trabalhar por PR em vez de upload direto na `main` | Orquestrador | — (aprovado, ADR-006) |
 | 7 | P1 | Corrigir nomes faltantes na confirmação de importar backup (`js/telas/ajustes.js:137`) | Frontend | — |
 | 8 | P1 | Revisão de segurança: PIN, Apps Script, XSS nos `innerHTML`, backup | Segurança | 1 |
 | 9 | P1 | Roteiro de regressão manual das 21 telas + offline/sincronização/conflito | QA | — |
@@ -27,4 +27,4 @@ Regra para todo item: **ponytail** (YAGNI → reuso → stdlib → solução mí
 | 11 | P2 | Auditoria de fluxos (pedido → produção → estoque → caixa) | UX | 10 |
 | 12 | P2 | Revisão dos tokens e dos 14 CSS (ex.: absorver `99-ajustes-finais.css`) | UI | 11 |
 
-Itens fora do backlog até o usuário confirmar (ADR-007): memória/RAG, indexação do computador, roteamento de modelos, conectores de e-mail/agenda, CLIs de IA, MCP. O Hermes está fora do projeto (ADR-008).
+Fora do projeto (ADR-007, ADR-008): assistente de IA, Hermes e outros repositórios.

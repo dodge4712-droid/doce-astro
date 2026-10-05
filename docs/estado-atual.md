@@ -40,6 +40,6 @@ Cobre: receitas (custo, markup, margem), ingredientes e histórico de preço, pe
 - Importar backup: o texto de confirmação não tem nome para `contasPagar` e `recorrencias` (`js/telas/ajustes.js:137`), então pode aparecer "undefined" na mensagem.
 - O PIN fica guardado em texto no aparelho (`S.meta.pin`, IndexedDB/localStorage) e viaja no corpo da requisição. Aceitável para uso pessoal; vale registro na revisão de segurança.
 
-## Divergência com o pedido de organização
+## Escopo
 
-A tabela de agentes do pedido fala em memória/RAG, indexação do computador, roteamento de modelos, CLIs de IA, MCP e "os 4 repositórios". **Nada disso existe neste repositório**, que é a PWA da doceria. Ver ADR-007 em [decisoes.md](decisoes.md): os papéis foram adaptados à PWA até o usuário confirmar.
+Só este app. Assistente de IA, Hermes e outros repositórios estão fora do projeto (ADR-007 e ADR-008 em [decisoes.md](decisoes.md)).

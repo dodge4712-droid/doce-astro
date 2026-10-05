@@ -25,15 +25,15 @@ Formato: contexto, decisão, consequência. Status: **aceita**, **proposta** (ag
 - Decisão: testes em `testes/*.test.js` com o runner nativo do Node; CI no GitHub Actions rodando `node --check` e `node --test`.
 - Consequência: zero dependência; testes de tela ficam no roteiro manual até haver necessidade real.
 
-## ADR-006: Mudanças por PR, não por upload na `main` (proposta)
+## ADR-006: Mudanças por PR, não por upload na `main` (aceita, pelo usuário em 05/10/2026)
 - Contexto: os 18 commits até hoje são uploads direto na `main`, sem revisão nem CI.
 - Decisão: cada agente trabalha em branch e abre PR; o usuário aprova o merge.
 - Consequência: histórico legível e CI antes de chegar ao celular.
 
-## ADR-007: Escopo da equipe de agentes adaptado à PWA (proposta, aguarda o usuário)
-- Contexto: a tabela de agentes do pedido descreve um assistente de IA local (memória/RAG, indexação do computador, roteamento de modelos, CLIs de IA, MCP, "4 repositórios"). Nada disso está neste repo.
-- Decisão: enquanto o usuário não confirmar, os papéis valem para a PWA da doceria; Pesquisa técnica e Memória & Contexto ficam suspensos.
-- Consequência: se o objetivo for mesmo um assistente de IA, este ADR é substituído e o roadmap ganha uma trilha nova.
+## ADR-007: Escopo é só o app da doceria (aceita, pelo usuário em 05/10/2026)
+- Contexto: a tabela de agentes do pedido descrevia um assistente de IA local (memória/RAG, indexação do computador, roteamento de modelos, CLIs de IA, MCP) e outros repositórios.
+- Decisão: o projeto é apenas o app Espaço Nave deste repositório. Assistente de IA e outros repositórios ficam fora.
+- Consequência: não há agentes de Pesquisa técnica nem de Memória & Contexto; os demais papéis valem para a PWA.
 
 ## ADR-008: Hermes fora do projeto (aceita, pelo usuário em 05/10/2026)
 - Decisão: ignorar tudo que se refere ao Hermes (análise, integração, arquitetura).
