@@ -2,13 +2,13 @@
 
 Um agente por thread. Todo agente de desenvolvimento segue a regra **ponytail** (YAGNI → reuso → stdlib → solução mínima) e entrega por PR. Decisões que mudam o produto vão para o usuário e viram ADR em [decisoes.md](decisoes.md).
 
-Escopo adaptado à PWA atual (ver ADR-007). Onde o pedido original citava IA/Hermes, isso está marcado como suspenso.
+Escopo adaptado à PWA atual (ver ADR-007). Onde o pedido original citava IA, isso está marcado como suspenso. Tudo que se referia ao Hermes foi retirado a pedido do usuário (ADR-008).
 
 | Agente | Responsabilidade | Entradas | Entregável | Pronto quando |
 |---|---|---|---|---|
 | **Orquestrador / PM** | Coordena, mantém roadmap e backlog, resolve conflitos, leva decisões ao usuário | Repo, pedidos do usuário, entregas dos agentes | `docs/roadmap.md`, `docs/decisoes.md`, README | Todo item do backlog tem dono e prioridade; toda decisão importante tem ADR |
 | **Business Blueprint** | Visão da doceria, casos de uso, persona (o usuário), próximo escopo, métricas | Conversa com o usuário, `docs/estado-atual.md` | `docs/visao.md` | Usuário aprovou visão, escopo da fase 2 e 3 a 5 métricas mensuráveis |
-| **Pesquisa técnica** | Analisar outras bases de código e dizer o que reaproveitar | Repositórios indicados pelo usuário | Relatório + matriz de reaproveitamento | Cada repo tem veredito (reusar / adaptar / ignorar) com motivo. *Suspenso até o usuário nomear os 4 repos e o Hermes* |
+| **Pesquisa técnica** | Analisar outras bases de código e dizer o que reaproveitar | Repositórios indicados pelo usuário | Relatório + matriz de reaproveitamento | Cada repo tem veredito (reusar / adaptar / ignorar) com motivo. *Suspenso até o usuário nomear os 4 repos* |
 | **Arquitetura** | Guardar o desenho atual (motor/serviços/núcleo/telas, offline-first) e decidir mudanças estruturais | Estado atual, visão | `docs/arquitetura.md` (diagrama + stack) | Diagrama bate com o código e cada mudança proposta tem ADR |
 | **UX** | Fluxos de uso das telas existentes e das novas | Visão, app rodando | Fluxos + wireframes de baixa | Fluxos principais revisados com o usuário |
 | **UI** | Visual, tokens (`css/01-tokens.css`), componentes, tema escuro | Fluxos da UX | Tokens + protótipo das telas novas | Tokens únicos, contraste AA nos dois temas |
@@ -26,4 +26,4 @@ Escopo adaptado à PWA atual (ver ADR-007). Onde o pedido original citava IA/Her
 4. **Business Blueprint**: em paralelo, só conversa com o usuário.
 5. **UX → UI → Frontend**: quando a visão definir o que construir.
 6. **Arquitetura**: só quando surgir mudança estrutural; hoje o desenho está documentado em `estado-atual.md`.
-7. **Pesquisa técnica** e **Memória & Contexto**: só se o usuário confirmar os repos, o Hermes e a parte de IA.
+7. **Pesquisa técnica** e **Memória & Contexto**: só se o usuário confirmar os repos e a parte de IA.

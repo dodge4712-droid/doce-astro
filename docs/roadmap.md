@@ -27,4 +27,4 @@ Regra para todo item: **ponytail** (YAGNI → reuso → stdlib → solução mí
 | 11 | P2 | Auditoria de fluxos (pedido → produção → estoque → caixa) | UX | 10 |
 | 12 | P2 | Revisão dos tokens e dos 14 CSS (ex.: absorver `99-ajustes-finais.css`) | UI | 11 |
 
-Itens fora do backlog até o usuário confirmar (ADR-007): memória/RAG, indexação do computador, roteamento de modelos, conectores de e-mail/agenda, CLIs de IA, MCP, Hermes.
+Itens fora do backlog até o usuário confirmar (ADR-007): memória/RAG, indexação do computador, roteamento de modelos, conectores de e-mail/agenda, CLIs de IA, MCP. O Hermes está fora do projeto (ADR-008).

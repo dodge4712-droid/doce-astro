@@ -31,6 +31,10 @@ Formato: contexto, decisão, consequência. Status: **aceita**, **proposta** (ag
 - Consequência: histórico legível e CI antes de chegar ao celular.
 
 ## ADR-007: Escopo da equipe de agentes adaptado à PWA (proposta, aguarda o usuário)
-- Contexto: a tabela de agentes do pedido descreve um assistente de IA local (memória/RAG, indexação do computador, roteamento de modelos, CLIs de IA, MCP, Hermes, "4 repositórios"). Nada disso está neste repo.
+- Contexto: a tabela de agentes do pedido descreve um assistente de IA local (memória/RAG, indexação do computador, roteamento de modelos, CLIs de IA, MCP, "4 repositórios"). Nada disso está neste repo.
 - Decisão: enquanto o usuário não confirmar, os papéis valem para a PWA da doceria; Pesquisa técnica e Memória & Contexto ficam suspensos.
 - Consequência: se o objetivo for mesmo um assistente de IA, este ADR é substituído e o roadmap ganha uma trilha nova.
+
+## ADR-008: Hermes fora do projeto (aceita, pelo usuário em 05/10/2026)
+- Decisão: ignorar tudo que se refere ao Hermes (análise, integração, arquitetura).
+- Consequência: nenhum agente estuda nem integra o Hermes.

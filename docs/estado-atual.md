@@ -42,4 +42,4 @@ Cobre: receitas (custo, markup, margem), ingredientes e histórico de preço, pe
 
 ## Divergência com o pedido de organização
 
-A tabela de agentes do pedido fala em memória/RAG, indexação do computador, roteamento de modelos, CLIs de IA, MCP, "os 4 repositórios" e o "Hermes". **Nada disso existe neste repositório**, que é a PWA da doceria. Ver ADR-007 em [decisoes.md](decisoes.md): os papéis foram adaptados à PWA até o usuário confirmar.
+A tabela de agentes do pedido fala em memória/RAG, indexação do computador, roteamento de modelos, CLIs de IA, MCP e "os 4 repositórios". **Nada disso existe neste repositório**, que é a PWA da doceria. Ver ADR-007 em [decisoes.md](decisoes.md): os papéis foram adaptados à PWA até o usuário confirmar.
