@@ -1,0 +1,21 @@
+name: Testes
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaxe de todos os arquivos JS
+        run: find . -path ./.git -prune -o \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+      - name: Testes do motor
+        run: node --test
+        env:
+          TZ: America/Sao_Paulo

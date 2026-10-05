@@ -4,6 +4,8 @@ import { hoje } from './util.js';
 
 export const VERSAO = '6.2.0';
 export const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos', 'lancamentos', 'estoque', 'contasPagar', 'recorrencias'];
+// Nome de cada tabela para mensagens (ex.: confirmação de importar backup). Toda tabela local precisa ter um.
+export const NOMES_TABELAS = { ingredientes: 'ingredientes', receitas: 'receitas', config: 'configurações', clientes: 'clientes', pedidos: 'pedidos', lancamentos: 'lançamentos do caixa', estoque: 'registros de estoque', contasPagar: 'contas a pagar', recorrencias: 'contas recorrentes' };
 export function dadosVazios() { const d = {}; TABELAS_LOCAIS.forEach(t => { d[t] = {}; }); return d; }
 // ================= Estado =================
 export const S = {

@@ -1,7 +1,7 @@
 // Tela Ajustes: sincronização, PIN, custos fixos, mão de obra, taxas, estoque, aparência e backup.
 import * as C from '../motor/index.js';
 import { gravarJa, lsGravar, salvarLocal } from '../nucleo/armazenamento.js';
-import { S, TABELAS_LOCAIS, VERSAO, cfg, dadosVazios, mediaContas } from '../nucleo/estado.js';
+import { NOMES_TABELAS, S, TABELAS_LOCAIS, VERSAO, cfg, dadosVazios, mediaContas } from '../nucleo/estado.js';
 import { I } from '../nucleo/icones.js';
 import { abrirFolha, aplicarTema, confirmar, toast } from '../nucleo/interface.js';
 import { excluirRegistro, gravarRegistro } from '../nucleo/registros.js';
@@ -134,7 +134,7 @@ export async function importar(arq) {
   try { j = JSON.parse(await arq.text()); } catch (e) { toast('Arquivo inválido: não é um backup do Espaço Nave.'); return; }
   if (!j || j.app !== 'espaco-nave' || !j.dados) { toast('Arquivo inválido: não é um backup do Espaço Nave.'); return; }
   const tabs = TABELAS_LOCAIS.filter(t => j.dados[t] && typeof j.dados[t] === 'object');
-  const nomes = { ingredientes: 'ingredientes', receitas: 'receitas', config: 'configurações', clientes: 'clientes', pedidos: 'pedidos', lancamentos: 'lançamentos do caixa', estoque: 'registros de estoque' };
+  const nomes = NOMES_TABELAS;
   const partes = tabs.map(t => t === 'config' ? 'as configurações' : Object.values(j.dados[t]).filter(r => r && !r.excluidoEm).length + ' ' + nomes[t]);
   const ok = await confirmar('Substituir os dados?', 'O arquivo traz ' + partes.join(', ') + '. Isso vai substituir ' + tabs.map(t => nomes[t]).join(' e ') + ' que estão no app' + (S.meta.modo === 'planilha' ? ' e na planilha' : '') + '; o que não estiver no arquivo será excluído.', 'Substituir dados', true);
   if (!ok) return;
