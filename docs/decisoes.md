@@ -1,0 +1,36 @@
+# Registro de decisões (ADRs)
+
+Formato: contexto, decisão, consequência. Status: **aceita**, **proposta** (aguarda o usuário) ou **substituída**.
+
+## ADR-001: PWA estática, sem build e sem dependências (aceita, já em uso)
+- Contexto: app de uso pessoal da doceria, no celular, precisa abrir sem internet.
+- Decisão: HTML + CSS + JavaScript com módulos ES, servidos como arquivos estáticos; service worker para offline.
+- Consequência: nada para instalar ou atualizar; qualquer biblioteca nova precisa de ADR.
+
+## ADR-002: Offline-first com Planilha do Google como servidor (aceita, já em uso)
+- Contexto: um ou mais aparelhos, sem custo de servidor.
+- Decisão: dados em IndexedDB + diário no localStorage; sincronização por fila com um Apps Script protegido por PIN; conflito resolvido por `atualizadoEm`, com a versão perdida guardada para restaurar.
+- Consequência: a planilha é a fonte compartilhada; o código do Apps Script faz parte do produto e precisa estar versionado (backlog #1).
+
+## ADR-003: Camadas motor / serviços / núcleo / telas (aceita, já em uso)
+- Decisão: cálculo puro em `js/motor/` (sem DOM, entrada única `index.js`); estado e IO no núcleo; telas só desenham e disparam ações.
+- Consequência: regras de dinheiro testáveis no Node; telas não fazem conta.
+
+## ADR-004: Regra ponytail para todos os agentes de desenvolvimento (aceita, pelo usuário)
+- Decisão: YAGNI → reuso → biblioteca padrão → solução mínima.
+- Consequência: sem framework novo, sem camada nova, sem item no backlog que não resolva um problema real.
+
+## ADR-005: Testes com `node:test` sobre o motor (proposta)
+- Contexto: não há testes no repo; o motor já roda no Node.
+- Decisão: testes em `testes/*.test.js` com o runner nativo do Node; CI no GitHub Actions rodando `node --check` e `node --test`.
+- Consequência: zero dependência; testes de tela ficam no roteiro manual até haver necessidade real.
+
+## ADR-006: Mudanças por PR, não por upload na `main` (proposta)
+- Contexto: os 18 commits até hoje são uploads direto na `main`, sem revisão nem CI.
+- Decisão: cada agente trabalha em branch e abre PR; o usuário aprova o merge.
+- Consequência: histórico legível e CI antes de chegar ao celular.
+
+## ADR-007: Escopo da equipe de agentes adaptado à PWA (proposta, aguarda o usuário)
+- Contexto: a tabela de agentes do pedido descreve um assistente de IA local (memória/RAG, indexação do computador, roteamento de modelos, CLIs de IA, MCP, Hermes, "4 repositórios"). Nada disso está neste repo.
+- Decisão: enquanto o usuário não confirmar, os papéis valem para a PWA da doceria; Pesquisa técnica e Memória & Contexto ficam suspensos.
+- Consequência: se o objetivo for mesmo um assistente de IA, este ADR é substituído e o roadmap ganha uma trilha nova.
