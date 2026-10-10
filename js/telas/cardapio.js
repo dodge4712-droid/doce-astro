@@ -1,5 +1,6 @@
 // Tela Receitas → Cardápio: monta o cardápio (itens, preços, descrições) e exporta em JPG para WhatsApp e Stories.
 import * as C from '../motor/index.js';
+import { lsGravar, lsLer } from '../nucleo/armazenamento.js';
 import { S, cfg, ctxCalc, lista } from '../nucleo/estado.js';
 import { I } from '../nucleo/icones.js';
 import { abas, abrirFolha, cab, confirmar, toast } from '../nucleo/interface.js';
@@ -236,7 +237,9 @@ function cardapioTablet(c, cor) {
   const d = cfg().doceria, contato = c.rodape ? [d.telefone, d.instagram].filter(Boolean) : [];
   const vars = { titulo: cor.titulo, recado: cor.recado, logo: cor.logo, ornamento: cor.ornamento, painel: cor.painel, borda: cor.painelBorda || 'transparent',
     cat: cor.categoria, linhacat: cor.linhaCat, nome: cor.nome, desc: cor.descricao, opcao: cor.opcao, preco: cor.preco, pontos: cor.pontos, rodape: cor.rodape };
+  vars.escala = Math.min(1.8, Math.max(0.7, +lsLer('letraTablet') || 1)); // tamanho da letra fica guardado neste aparelho
   return '<div class="mt-lista" style="' + Object.keys(vars).map(k => '--mt-' + k + ':' + vars[k]).join(';') + '">' +
+    '<div class="mt-letra seg" role="group" aria-label="Tamanho da letra"><button type="button" data-letra="-1" aria-label="Diminuir a letra">A−</button><button type="button" data-letra="1" aria-label="Aumentar a letra">A+</button></div>' +
     '<header><i class="mt-logo" aria-hidden="true"></i><h2>' + esc(c.titulo || 'Cardápio') + '</h2>' + (c.recado ? '<p>' + esc(c.recado) + '</p>' : '') +
     (contato.length ? '<p class="mt-contato">' + contato.map(esc).join('<br>') + '</p>' : '') + '</header>' +
     '<div class="mt-painel"><div class="mt-colunas">' + C.cardapioParaImagem(c).map(cat => '<section><h3>' + esc(cat.nome || 'Outros') + '</h3><ul>' + cat.itens.map(itemTablet).join('') + '</ul></section>').join('') + '</div></div></div>';
@@ -269,6 +272,13 @@ async function modoTablet() {
   });
   d.addEventListener('click', function (e) {
     if (e.target.closest('[data-fechar]')) { d.close(); return; }
+    const l = e.target.closest('[data-letra]');
+    if (l) {
+      const ml = $('.mt-lista', d), atual = +ml.style.getPropertyValue('--mt-escala') || 1;
+      const nova = Math.round(Math.min(1.8, Math.max(0.7, atual + 0.1 * +l.dataset.letra)) * 10) / 10;
+      ml.style.setProperty('--mt-escala', nova); lsGravar('letraTablet', nova);
+      return;
+    }
     // Cardápio e Pix em telas separadas: o QR ocupa a tela toda
     const b = e.target.closest('[data-mt]'); if (!b) return;
     const pix = b.dataset.mt === 'pix';
