@@ -2,9 +2,10 @@
 // Funções puras: não tocam na tela, na rede nem no armazenamento.
 import { round2 } from './datas.js';
 import { numOk } from './numeros.js';
+import { TIPOS_CHAVE_PIX } from './pix.js';
 import { calcularReceita } from './receitas.js';
 
-export const LIMITES_CARDAPIO = { titulo: 40, recado: 120, categoria: 40, nome: 60, descricao: 120, opcao: 40, opcoes: 6, itens: 80 };
+export const LIMITES_CARDAPIO = { titulo: 40, recado: 120, categoria: 40, nome: 60, descricao: 120, opcao: 40, opcoes: 6, itens: 80, pixChave: 77, pixCidade: 15 };
 export const TEMAS_CARDAPIO = { chocolate: 'Chocolate', creme: 'Creme' };
 
 // Texto de uma linha só, com tamanho limitado
@@ -12,7 +13,7 @@ function curto(s, n) { return String(s === null || s === undefined ? '' : s).rep
 function preco(v) { return numOk(v) && v > 0 ? round2(v) : null; }
 
 export function cardapioPadrao() {
-  return { id: 'cardapio', titulo: 'Cardápio', recado: '', tema: 'chocolate', rodape: true, categorias: [] };
+  return { id: 'cardapio', titulo: 'Cardápio', recado: '', tema: 'chocolate', rodape: true, pixTipo: 'celular', pixChave: '', pixCidade: '', categorias: [] };
 }
 // Deixa o cardápio no formato certo, com os limites de tamanho (o que vem da planilha ou de outro aparelho também passa aqui)
 export function normalizarCardapio(c) {
@@ -25,6 +26,9 @@ export function normalizarCardapio(c) {
     recado: curto(c.recado, L.recado),
     tema: TEMAS_CARDAPIO[c.tema] ? c.tema : p.tema,
     rodape: c.rodape !== false,
+    pixTipo: TIPOS_CHAVE_PIX[c.pixTipo] ? c.pixTipo : p.pixTipo,
+    pixChave: curto(c.pixChave, L.pixChave),
+    pixCidade: curto(c.pixCidade, L.pixCidade),
     categorias: (Array.isArray(c.categorias) ? c.categorias : []).filter(x => x && typeof x === 'object').map(function (cat, i) {
       return {
         id: String(cat.id || 'cat' + i), nome: curto(cat.nome, L.categoria),

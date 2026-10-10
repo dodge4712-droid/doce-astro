@@ -2,7 +2,7 @@
 import * as C from '../motor/index.js';
 import { hoje } from './util.js';
 
-export const VERSAO = '6.2.0';
+export const VERSAO = '6.2.1';
 export const TABELAS_LOCAIS = ['ingredientes', 'receitas', 'config', 'clientes', 'pedidos', 'lancamentos', 'estoque', 'contasPagar', 'recorrencias'];
 export function dadosVazios() { const d = {}; TABELAS_LOCAIS.forEach(t => { d[t] = {}; }); return d; }
 // ================= Estado =================

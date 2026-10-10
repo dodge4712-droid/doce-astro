@@ -19,3 +19,4 @@ export { custoIngrediente, variacaoPreco, aplicarCompra, removerCompra } from '.
 export { contasFixasCobertas } from './contas-fixas.js';
 export { LIMITES_CARDAPIO, TEMAS_CARDAPIO, cardapioPadrao, normalizarCardapio, itemDaReceita, adicionarAoCardapio, totalItensCardapio, cardapioParaImagem } from './cardapio.js';
 export { STORIES, CORES_CARDAPIO, FONTES_CARDAPIO, quebrarLinhas, linhasEquilibradas, paginasCardapio } from './cardapio-imagem.js';
+export { TIPOS_CHAVE_PIX, chavePix, codigoPix, qrCode } from './pix.js';
