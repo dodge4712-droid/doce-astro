@@ -54,3 +54,32 @@ dialog.modo-tablet [hidden] { display: none; }
 .mt-fechar { position: absolute; top: 12px; right: 12px; background: rgba(255,255,255,.85); }
 .mt-trocar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,.92); }
 .mt-trocar button { font-size: 16px; padding: 12px 24px; min-height: 48px; }
+.mt-cardapio { display: flex; justify-content: center; width: 100%; height: 100%; min-width: 0; }
+.mt-lista { display: none; }
+/* Tablet deitado: título à esquerda e os itens em colunas, usando a tela toda */
+@media (orientation: landscape) {
+  .mt-paginas { display: none; }
+  .mt-lista { display: grid; grid-template-columns: minmax(200px, 24vw) minmax(0, 1fr); gap: 3vw; align-items: center; width: 100%; height: 100%; }
+  .mt-lista header { text-align: center; color: var(--mt-recado); }
+  .mt-logo { display: block; width: clamp(80px, 16vh, 150px); aspect-ratio: 1; margin: 0 auto 2vh; background: var(--mt-logo); -webkit-mask: url(../icons/logo-selo.png) center / contain no-repeat; mask: url(../icons/logo-selo.png) center / contain no-repeat; }
+  .mt-lista h2 { font-family: "Playfair Display", Georgia, serif; font-weight: 600; font-size: clamp(36px, 8vh, 80px); line-height: 1.05; color: var(--mt-titulo); overflow-wrap: anywhere; }
+  .mt-lista h2::after { content: '✦'; display: block; font-size: .3em; margin-top: 1.5vh; color: var(--mt-ornamento); }
+  .mt-lista header p { font-family: "Playfair Display", Georgia, serif; font-style: italic; font-size: clamp(16px, 2.6vh, 24px); margin-top: 2vh; }
+  .mt-lista header .mt-contato { font-family: Montserrat, Arial, sans-serif; font-style: normal; font-weight: 600; color: var(--mt-rodape); }
+  dialog.modo-tablet { padding-top: 64px; }
+  .mt-painel { max-height: 100%; overflow-y: auto; background: var(--mt-painel); border: 2px solid var(--mt-borda); border-radius: 3vh; padding: 3.5vh 3vw; box-shadow: 0 18px 48px rgba(0,0,0,.3); font-family: Montserrat, Arial, sans-serif; }
+  .mt-colunas { column-width: 260px; column-gap: 4vw; column-rule: 1px solid var(--mt-pontos); }
+  .mt-painel ul { padding: 0; margin: 0; }
+  .mt-painel section { break-inside: avoid-column; margin-bottom: 3vh; }
+  .mt-painel h3 { display: flex; align-items: center; gap: 14px; font-family: "Playfair Display", Georgia, serif; font-weight: 600; font-size: clamp(22px, 4vh, 36px); color: var(--mt-cat); margin-bottom: 1vh; }
+  .mt-painel h3::after { content: ''; flex: 1; border-top: 2px solid var(--mt-linhacat); }
+  .mt-painel li { list-style: none; break-inside: avoid; padding: 1.2vh 0; border-bottom: 1px solid var(--mt-pontos); }
+  .mt-painel li:last-child { border-bottom: 0; }
+  .mt-linha { display: flex; align-items: baseline; gap: 8px; color: var(--mt-opcao); font-size: clamp(15px, 2.4vh, 22px); }
+  .mt-linha + .mt-linha, .mt-desc + .mt-linha { margin-top: .5vh; }
+  .mt-nome { font-weight: 700; color: var(--mt-nome); font-size: clamp(17px, 2.8vh, 26px); }
+  .mt-linha b { color: var(--mt-preco); white-space: nowrap; }
+  .mt-linha i { color: var(--mt-linhacat); }
+  .mt-pontos { flex: 1; min-width: 16px; border-bottom: 3px dotted var(--mt-pontos); }
+  .mt-desc { color: var(--mt-desc); font-size: clamp(13px, 2vh, 18px); margin-top: .3vh; }
+}

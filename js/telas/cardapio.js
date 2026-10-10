@@ -222,13 +222,32 @@ function desenharQR(canvas, m) {
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, n * t, n * t); ctx.fillStyle = '#000';
   m.forEach((l, y) => l.forEach((e, x) => { if (e) ctx.fillRect((x + 4) * t, (y + 4) * t, t, t); }));
 }
+// Com o tablet deitado, o cardápio vira texto em colunas (a imagem de Stories é estreita demais).
+// Mesmas regras da imagem: opção única sem nome mostra só o preço na linha do item.
+function itemTablet(it) {
+  const u = it.opcoes.length === 1 ? it.opcoes[0] : null;
+  const naLinha = u && !u.nome && u.preco !== null ? '<b>' + C.brl(u.preco) + '</b>' : u && u.nome && u.preco === null ? '<i>' + esc(u.nome) + '</i>' : '';
+  const linha = (nome, fim) => '<div class="mt-linha">' + nome + (fim ? '<span class="mt-pontos" aria-hidden="true"></span>' + fim : '') + '</div>';
+  return '<li>' + linha('<span class="mt-nome">' + esc(it.nome) + '</span>', naLinha) +
+    (it.descricao ? '<p class="mt-desc">' + esc(it.descricao) + '</p>' : '') +
+    (naLinha ? '' : it.opcoes.map(o => linha(o.preco !== null ? '<span>' + esc(o.nome) + '</span>' : '<i>' + esc(o.nome) + '</i>', o.preco !== null ? '<b>' + C.brl(o.preco) + '</b>' : '')).join('')) + '</li>';
+}
+function cardapioTablet(c, cor) {
+  const d = cfg().doceria, contato = c.rodape ? [d.telefone, d.instagram].filter(Boolean) : [];
+  const vars = { titulo: cor.titulo, recado: cor.recado, logo: cor.logo, ornamento: cor.ornamento, painel: cor.painel, borda: cor.painelBorda || 'transparent',
+    cat: cor.categoria, linhacat: cor.linhaCat, nome: cor.nome, desc: cor.descricao, opcao: cor.opcao, preco: cor.preco, pontos: cor.pontos, rodape: cor.rodape };
+  return '<div class="mt-lista" style="' + Object.keys(vars).map(k => '--mt-' + k + ':' + vars[k]).join(';') + '">' +
+    '<header><i class="mt-logo" aria-hidden="true"></i><h2>' + esc(c.titulo || 'Cardápio') + '</h2>' + (c.recado ? '<p>' + esc(c.recado) + '</p>' : '') +
+    (contato.length ? '<p class="mt-contato">' + contato.map(esc).join('<br>') + '</p>' : '') + '</header>' +
+    '<div class="mt-painel"><div class="mt-colunas">' + C.cardapioParaImagem(c).map(cat => '<section><h3>' + esc(cat.nome || 'Outros') + '</h3><ul>' + cat.itens.map(itemTablet).join('') + '</ul></section>').join('') + '</div></div></div>';
+}
 async function modoTablet() {
   if (!recursos) recursos = await prepararDesenho();
   const c = lerCardapio(), cor = C.CORES_CARDAPIO[c.tema], pix = pixDoCardapio(c), qr = pix && C.qrCode(pix);
   const d = document.createElement('dialog'); d.className = 'modo-tablet';
   d.setAttribute('aria-label', 'Cardápio no modo tablet');
   d.style.background = 'linear-gradient(' + cor.fundo[0] + ', ' + cor.fundo[1] + ')';
-  d.innerHTML = '<div class="mt-paginas"></div>' +
+  d.innerHTML = '<div class="mt-cardapio"><div class="mt-paginas"></div>' + cardapioTablet(c, cor) + '</div>' +
     (qr ? '<section class="mt-pix" hidden><h2>Pague com Pix</h2><canvas role="img" aria-label="QR code do Pix"></canvas><p>Abra o app do banco, escolha Pix e leia o código.</p><p class="mt-chave">Chave: ' + esc(c.pixChave) + '</p></section>' +
       '<nav class="mt-trocar seg" aria-label="O que mostrar"><button type="button" data-mt="cardapio" aria-pressed="true">Cardápio</button><button type="button" data-mt="pix" aria-pressed="false">Pague com Pix</button></nav>' : '') +
     '<button type="button" class="btn-icone mt-fechar" data-fechar aria-label="Sair do modo tablet">' + I.fechar + '</button>';
@@ -253,7 +272,7 @@ async function modoTablet() {
     // Cardápio e Pix em telas separadas: o QR ocupa a tela toda
     const b = e.target.closest('[data-mt]'); if (!b) return;
     const pix = b.dataset.mt === 'pix';
-    $('.mt-paginas', d).hidden = pix; $('.mt-pix', d).hidden = !pix;
+    $('.mt-cardapio', d).hidden = pix; $('.mt-pix', d).hidden = !pix;
     $$('[data-mt]', d).forEach(x => x.setAttribute('aria-pressed', x === b));
   });
   d.showModal();
