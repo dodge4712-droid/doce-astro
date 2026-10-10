@@ -30,6 +30,13 @@ export function telaCardapio() {
         '<button type="button" class="interruptor" role="switch" aria-checked="' + c.rodape + '" aria-label="WhatsApp e Instagram no rodapé" data-acao="cardapio-rodape"></button></div>';
     })() + '</section>';
 
+  // Pix (QR code no modo tablet)
+  h += '<section class="bloco" id="cardapio-pix"><h2>Pix no modo tablet</h2><p class="explica">O QR code do Pix aparece ao lado do cardápio no modo tablet. Quem paga digita o valor no app do banco.</p><div class="grade">' +
+    '<label class="campo"><span>Tipo de chave</span><select class="entrada" data-cc="pixTipo">' + Object.keys(C.TIPOS_CHAVE_PIX).map(k => '<option value="' + k + '"' + (c.pixTipo === k ? ' selected' : '') + '>' + C.TIPOS_CHAVE_PIX[k] + '</option>').join('') + '</select></label>' +
+    '<label class="campo"><span>Chave Pix</span><input class="entrada" data-cc="pixChave" maxlength="' + L.pixChave + '" value="' + esc(c.pixChave) + '" autocomplete="off"></label>' +
+    '<label class="campo"><span>Cidade</span><input class="entrada" data-cc="pixCidade" maxlength="' + L.pixCidade + '" value="' + esc(c.pixCidade) + '" placeholder="Ex.: São Paulo"><small>O Pix exige a cidade de quem recebe.</small></label></div>' +
+    '<p class="mudo" id="aviso-pix" role="status">' + avisoPix(c) + '</p></section>';
+
   // Itens
   h += '<section class="bloco" id="cardapio-itens"><h2>Itens do cardápio</h2>';
   if (!total) {
@@ -62,10 +69,18 @@ export function telaCardapio() {
   h += '<aside class="previa-col"><section class="bloco" id="previa-cardapio"><h2>Prévia</h2>' +
     '<div class="moldura-previa"><canvas id="canvas-cardapio" width="1080" height="1920" role="img" aria-label="Prévia do cardápio"></canvas></div>' +
     '<div class="paginas-previa" id="paginas-previa" hidden><button type="button" class="btn-icone" data-acao="cardapio-pagina" data-v="-1" aria-label="Página anterior">' + I.voltar + '</button><span id="pagina-txt" role="status"></span><button type="button" class="btn-icone" data-acao="cardapio-pagina" data-v="1" aria-label="Próxima página">' + I.seta + '</button></div>' +
-    '<div class="acoes"><button type="button" class="btn" data-acao="cardapio-compartilhar">' + I.enviar + 'Compartilhar</button><button type="button" class="btn sec" data-acao="cardapio-baixar">' + I.baixar + 'Baixar JPG</button></div>' +
+    '<div class="acoes"><button type="button" class="btn" data-acao="cardapio-compartilhar">' + I.enviar + 'Compartilhar</button><button type="button" class="btn sec" data-acao="cardapio-baixar">' + I.baixar + 'Baixar JPG</button><button type="button" class="btn sec" data-acao="cardapio-tablet">' + I.celular + 'Modo tablet</button></div>' +
     '<p class="mudo dica-previa">Tamanho de Stories (1080 × 1920). No celular, <b>Compartilhar</b> abre o WhatsApp e o Instagram. Se não couber numa imagem, o cardápio vira mais de uma, em sequência.</p>' +
     '</section></aside></div>';
   return h;
+}
+
+function pixDoCardapio(c) { return C.codigoPix({ tipo: c.pixTipo, chave: c.pixChave, nome: cfg().doceria.nome, cidade: c.pixCidade }); }
+function avisoPix(c) {
+  if (!c.pixChave) return 'Preencha a chave para o QR code aparecer no modo tablet.';
+  if (!C.chavePix(c.pixTipo, c.pixChave)) return 'A chave não confere com o tipo escolhido (' + C.TIPOS_CHAVE_PIX[c.pixTipo] + '). Confira os dois.';
+  if (!pixDoCardapio(c)) return 'Preencha a cidade e o nome da doceria em <a href="#/ajustes">Ajustes</a>.';
+  return 'Pronto: o QR code recebe em nome de ' + esc(cfg().doceria.nome) + '.';
 }
 
 // ---------- Prévia ----------
@@ -90,13 +105,14 @@ export async function desenharPrevia() {
 let espera = null;
 // Chamado pelo roteador depois de desenhar a tela
 export function montarTelaCardapio() {
-  const form = $('#cardapio-aparencia'); if (!form) return;
+  const form = $('.form-cardapio'); if (!form) return;
   // grava todos os campos juntos (quem digita no título e logo depois no recado não perde o título)
   form.addEventListener('input', function (ev) {
     if (!ev.target.dataset.cc) return;
     clearTimeout(espera);
     espera = setTimeout(function () {
-      mudarCardapio(c => { $$('[data-cc]', form).forEach(el => { c[el.dataset.cc] = el.value; }); });
+      const c = mudarCardapio(c => { $$('[data-cc]', form).forEach(el => { c[el.dataset.cc] = el.value; }); });
+      $('#aviso-pix').innerHTML = avisoPix(c);
       desenharPrevia();
     }, 350);
   });
@@ -198,6 +214,45 @@ function baixar(arqs) {
     }, i * 400);
   });
 }
+// Tela cheia para deixar no tablet: as páginas do cardápio e o QR code do Pix
+function desenharQR(canvas, m) {
+  const t = 8, n = m.length + 8;
+  canvas.width = canvas.height = n * t;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, n * t, n * t); ctx.fillStyle = '#000';
+  m.forEach((l, y) => l.forEach((e, x) => { if (e) ctx.fillRect((x + 4) * t, (y + 4) * t, t, t); }));
+}
+async function modoTablet() {
+  if (!recursos) recursos = await prepararDesenho();
+  const c = lerCardapio(), cor = C.CORES_CARDAPIO[c.tema], pix = pixDoCardapio(c), qr = pix && C.qrCode(pix);
+  const d = document.createElement('dialog'); d.className = 'modo-tablet';
+  d.setAttribute('aria-label', 'Cardápio no modo tablet');
+  d.style.background = 'linear-gradient(' + cor.fundo[0] + ', ' + cor.fundo[1] + ')';
+  d.innerHTML = '<div class="mt-paginas"></div>' +
+    (qr ? '<aside class="mt-pix"><h2>Pague com Pix</h2><canvas role="img" aria-label="QR code do Pix"></canvas><div><p>Abra o app do banco, escolha Pix e leia o código.</p><p class="mt-chave">Chave: ' + esc(c.pixChave) + '</p></div></aside>' : '') +
+    '<button type="button" class="btn-icone mt-fechar" data-fechar aria-label="Sair do modo tablet">' + I.fechar + '</button>';
+  const pgs = paginas(opcoesImagem());
+  pgs.forEach(function (p, i) {
+    const cv = document.createElement('canvas');
+    desenharPagina(cv, p, recursos);
+    cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', 'Cardápio, imagem ' + (i + 1) + ' de ' + pgs.length);
+    $('.mt-paginas', d).appendChild(cv);
+  });
+  if (qr) desenharQR($('.mt-pix canvas', d), qr);
+  else toast('Preencha o Pix no cardápio para o QR code aparecer aqui.');
+  document.body.appendChild(d);
+  let trava = null;
+  d.addEventListener('close', function () {
+    if (trava) trava.release().catch(() => {});
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    d.remove();
+  });
+  d.addEventListener('click', function (e) { if (e.target.closest('[data-fechar]')) d.close(); });
+  d.showModal();
+  // Tela cheia e tela sempre acesa, quando o aparelho deixa
+  if (d.requestFullscreen) d.requestFullscreen().catch(() => {});
+  try { trava = await navigator.wakeLock.request('screen'); } catch (e) { /* sem trava: a tela pode apagar sozinha */ }
+}
 function vazio() { return !C.cardapioParaImagem(lerCardapio()).length; }
 
 // Ações dos botões desta parte (data-acao="...")
@@ -245,6 +300,10 @@ export const ACOES_CARDAPIO = {
     if (vazio()) { toast('Ligue pelo menos um item para exportar.'); return; }
     if (exportando) return; exportando = true;
     try { const arqs = await gerarArquivos(); baixar(arqs); toast(arqs.length === 1 ? 'Imagem baixada.' : arqs.length + ' imagens baixadas.'); } finally { exportando = false; }
+  },
+  'cardapio-tablet': function () {
+    if (vazio()) { toast('Ligue pelo menos um item para mostrar.'); return; }
+    modoTablet();
   },
   'cardapio-compartilhar': async function () {
     if (vazio()) { toast('Ligue pelo menos um item para exportar.'); return; }
