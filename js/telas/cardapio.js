@@ -229,7 +229,8 @@ async function modoTablet() {
   d.setAttribute('aria-label', 'Cardápio no modo tablet');
   d.style.background = 'linear-gradient(' + cor.fundo[0] + ', ' + cor.fundo[1] + ')';
   d.innerHTML = '<div class="mt-paginas"></div>' +
-    (qr ? '<aside class="mt-pix"><h2>Pague com Pix</h2><canvas role="img" aria-label="QR code do Pix"></canvas><div><p>Abra o app do banco, escolha Pix e leia o código.</p><p class="mt-chave">Chave: ' + esc(c.pixChave) + '</p></div></aside>' : '') +
+    (qr ? '<section class="mt-pix" hidden><h2>Pague com Pix</h2><canvas role="img" aria-label="QR code do Pix"></canvas><p>Abra o app do banco, escolha Pix e leia o código.</p><p class="mt-chave">Chave: ' + esc(c.pixChave) + '</p></section>' +
+      '<nav class="mt-trocar seg" aria-label="O que mostrar"><button type="button" data-mt="cardapio" aria-pressed="true">Cardápio</button><button type="button" data-mt="pix" aria-pressed="false">Pague com Pix</button></nav>' : '') +
     '<button type="button" class="btn-icone mt-fechar" data-fechar aria-label="Sair do modo tablet">' + I.fechar + '</button>';
   const pgs = paginas(opcoesImagem());
   pgs.forEach(function (p, i) {
@@ -247,7 +248,14 @@ async function modoTablet() {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     d.remove();
   });
-  d.addEventListener('click', function (e) { if (e.target.closest('[data-fechar]')) d.close(); });
+  d.addEventListener('click', function (e) {
+    if (e.target.closest('[data-fechar]')) { d.close(); return; }
+    // Cardápio e Pix em telas separadas: o QR ocupa a tela toda
+    const b = e.target.closest('[data-mt]'); if (!b) return;
+    const pix = b.dataset.mt === 'pix';
+    $('.mt-paginas', d).hidden = pix; $('.mt-pix', d).hidden = !pix;
+    $$('[data-mt]', d).forEach(x => x.setAttribute('aria-pressed', x === b));
+  });
   d.showModal();
   // Tela cheia e tela sempre acesa, quando o aparelho deixa
   if (d.requestFullscreen) d.requestFullscreen().catch(() => {});

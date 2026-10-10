@@ -1,6 +1,6 @@
 /* Espaço Nave — service worker: abre o app sem internet.
    A versão e a lista CASCA são geradas por ferramentas/atualizar-cache.js: não edite à mão. */
-const VERSAO = 'espaco-nave-v6.2.1';
+const VERSAO = 'espaco-nave-v6.2.2';
 const CASCA = [
   './',
   './css/01-tokens.css',
